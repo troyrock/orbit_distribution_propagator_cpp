@@ -4,6 +4,9 @@ C++ Monte Carlo propagation of initial Earth-orbit uncertainty using the native
 Orekit DSST port. Follow nonlinear particle trajectories, measure orbital
 coverage and phase mixing, and explore the cloud in a self-contained HTML viewer.
 
+The equivalent native Python tool is
+[orbit_distribution_propagator_python](https://github.com/troyrock/orbit_distribution_propagator_python).
+
 The ball → banana → ribbon hypothesis is plausible when orbital-energy
 uncertainty creates different orbital periods. Coverage and near-uniform mixing
 are different events. Read [the scientific critique](docs/SCIENCE.md) and
@@ -15,16 +18,36 @@ in [docs/VALIDATION.md](docs/VALIDATION.md). For the broad demonstration, the
 
 ## Build
 
-Requires CMake 3.20+, a C++17 compiler and the external native DSST checkout.
+Requires CMake 3.20+, Git, a C++17 compiler and the external native DSST checkout.
 Python 3 enables CLI tests and study scripts. Java is needed only to regenerate
 reference fixtures; neither Java nor Python is required by the executable.
 
+Clone this application, then obtain the public
+[native DSST C++ dependency](https://github.com/troyrock/DSST-Cpp) at the validated
+revision. These commands work in PowerShell and POSIX shells:
+
+```text
+git clone https://github.com/troyrock/orbit_distribution_propagator_cpp.git
+cd orbit_distribution_propagator_cpp
+git clone https://github.com/troyrock/DSST-Cpp.git external/DSST-Cpp
+git -C external/DSST-Cpp checkout --detach e653cd40e5e057cb89395afd8a9e3012ad59b12c
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release --parallel 6
+ctest --test-dir build -C Release --output-on-failure -j 1
+```
+
+CMake uses `external/DSST-Cpp` by default. To use an existing dependency checkout,
+pass `-DDSST_SOURCE_DIR=/absolute/path/to/DSST-Cpp` when configuring. The build
+does not download or modify the dependency. It records the actual dependency
+Git revision in output metadata. The pinned revision is an Orekit 13.1.6 port.
+If using a source archive without Git metadata, the recorded revision is `unknown`.
+
+For Windows with MSYS2 UCRT GCC and Ninja, configure with the matching toolchain:
+
 ```powershell
-cd 'D:\two orbits collision rate\distribution_propagator'
 $env:PATH = 'C:\msys64\ucrt64\bin;' + $env:PATH
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release `
-  -DCMAKE_CXX_COMPILER=C:/msys64/ucrt64/bin/g++.exe `
-  -DDSST_SOURCE_DIR=D:/orekit/DSST-cpp
+  -DCMAKE_CXX_COMPILER=C:/msys64/ucrt64/bin/g++.exe
 cmake --build build --parallel 6
 ctest --test-dir build --output-on-failure -j 1
 ```
@@ -34,10 +57,9 @@ beside the executables, so running them does not depend on global `PATH` order.
 Keep those three DLLs with the executable if you move it. This prevents the
 `nanosleep64` entry-point error caused by older runtime DLLs from applications
 such as Meld. For Visual Studio omit `-G Ninja` and the compiler argument, then
-build with `--config Release` and test with `-C Release`. On other platforms set
-`DSST_SOURCE_DIR` to your native C++ checkout. No dependency is downloaded or
-modified. The audited revision is `e653cd40e5e057cb89395afd8a9e3012ad59b12c`
-(Orekit 13.1.6 port); the build records that revision in output metadata.
+build with `--config Release` and test with `-C Release`. Use a separate build
+directory when switching generators or compilers. Visual Studio places the
+executable in `build/Release/`; Ninja and Makefiles place it in `build/`.
 
 ## Run and visualize
 
@@ -45,6 +67,10 @@ modified. The audited revision is `e653cd40e5e057cb89395afd8a9e3012ad59b12c`
 .\build\distribution_propagator.exe --config examples/meo_ball.cfg --output outputs/meo-ball
 Start-Process .\outputs\meo-ball\visualization.html
 ```
+
+With Visual Studio use `.\build\Release\distribution_propagator.exe`. On Linux
+or macOS use `./build/distribution_propagator`, then open the generated HTML in
+your browser. No web server or network connection is needed for the viewer.
 
 This deliberately broad demonstration uses isotropic 100 km position and 1 m/s
 velocity standard deviations in RTN, around a 26,560 km semimajor-axis orbit
@@ -205,12 +231,15 @@ relative to that ellipse, not a nearest-point fit or proof of a thin tube.
 Release-active tests cover orbit oracles, covariance moments, angle branch cuts,
 equal-energy no-shear, non-Gaussian lobes, thread determinism, mean/osculating
 round trips, tolerance refinement, Java parity and full CLI workflows.
-The upstream Java fixture comparator is also built without changing its gates.
-If its generated CSV is unavailable, those tests are explicitly skipped.
-Its gravity checks also need the adjacent Orekit Java source test resource
-`potential/shm-format/eigen_cg03c_coef`; the build copies the data into its test
-directory. With a standalone C++ checkout lacking that resource, set
-`-DDISTRIBUTION_OREKIT_FIXTURES=OFF` and retain this project's independent fixture.
+This project's committed Java parity fixture runs without any Java installation
+or external gravity data. The optional upstream Java fixture comparator is
+also built when both its generated CSV and the adjacent Orekit Java source test
+resource `potential/shm-format/eigen_cg03c_coef` are present. The build copies
+those data into its test directory without changing their gates. A standalone
+dependency checkout usually lacks the adjacent Java resource; CMake reports
+the unavailable optional tests while retaining all application tests and this
+project's independent Java parity fixture. Set
+`-DDISTRIBUTION_OREKIT_FIXTURES=OFF` to disable the optional comparator explicitly.
 `DISTRIBUTION_UPSTREAM_TESTS=ON` enables every upstream test; one current zonal
 test passes a temporary to a mutable reference and GCC rejects it. Default
 application/reference targets do not depend on that compiler-specific test.
