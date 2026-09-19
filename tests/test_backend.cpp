@@ -110,13 +110,16 @@ void conversion_roundtrip() {
 
 void native_rk4_comparison() {
     for (const std::string force : {"j2", "j2_j2sq"}) {
+      for (const Elements initial_elements : {sample(),
+          Elements{30000000.0, 0.6, 0.1, 0.99, 0.05, 2.8},
+          Elements{30000000.0, 0.0, 0.0, 1.7, 0.1, -2.0}}) {
         BackendConfig config;
         config.force_model = force;
         config.initial_type = "mean";
-        Backend adaptive(config, sample());
+        Backend adaptive(config, initial_elements);
         dsst::DSSTPropagator native;
         configure_native(native, config);
-        auto initial = orbit_from(sample(), config.mu);
+        auto initial = orbit_from(initial_elements, config.mu);
         native.setInitialState(initial, "MEAN");
         const double target = 14.0 * 86400.0;
         const auto expected_orbit = native.propagate(target, 300.0);
@@ -132,6 +135,7 @@ void native_rk4_comparison() {
         for (std::size_t j = 0; j < 6; ++j) {
             near(actual.osculating[j], expected_osculating[j], j == 0 ? 5e-5 : 5e-11, "native osculating output comparison");
         }
+      }
     }
 }
 

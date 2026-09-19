@@ -1,0 +1,8 @@
+# Covariance order: dr,dt,dn [m], dvr,dvt,dvn [m/s]. Symmetric PSD.
+# corr(dr,dvt)=+0.5; all other off-diagonal entries zero.
+1000000,0,0,0,50,0
+0,1000000,0,0,0,0
+0,0,1000000,0,0,0
+0,0,0,0.01,0,0
+50,0,0,0,0.01,0
+0,0,0,0,0,0.01

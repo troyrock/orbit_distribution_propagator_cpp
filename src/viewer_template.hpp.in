@@ -1,0 +1,5 @@
+#pragma once
+namespace distribution {
+inline constexpr const char viewer_template[] = R"DP_VIEWER(@VIEWER_TEMPLATE@)DP_VIEWER";
+inline constexpr const char dsst_revision[] = "@DSST_REVISION@";
+}

@@ -1,18 +1,207 @@
 # Distribution propagator
 
-A C++ Monte Carlo experiment for the evolution of Earth-orbit uncertainty,
-using the native Orekit DSST port in `D:/orekit/DSST-cpp`.
+C++ Monte Carlo propagation of initial Earth-orbit uncertainty using the native
+Orekit DSST port. Follow nonlinear particle trajectories, measure orbital
+coverage and phase mixing, and explore the cloud in a self-contained HTML viewer.
 
-Development is in progress. The completed guide will include build commands,
-configuration conventions, examples, accuracy checks and an offline HTML viewer.
+The ball → banana → ribbon hypothesis is plausible when orbital-energy
+uncertainty creates different orbital periods. Coverage and near-uniform mixing
+are different events. Read [the scientific critique](docs/SCIENCE.md) and
+[the algorithms and data structures](DESCRIPTION.md).
 
-## Scope
+## Build
 
-The simulator follows a fixed set of initial orbit samples without measurement
-updates or atmospheric drag. It distinguishes orbital coverage from phase
-mixing and retains nonlinear samples after a single Cartesian covariance loses
-its geometric meaning. Initial Gaussian uncertainty and empirical ensembles
-will be supported. Mean and osculating elements are explicitly distinguished.
+Requires CMake 3.20+, a C++17 compiler and the external native DSST checkout.
+Python 3 enables CLI tests and study scripts. Java is needed only to regenerate
+reference fixtures; neither Java nor Python is required by the executable.
 
-The dependency is external and read-only. Its audited starting commit is
-`e653cd40e5e057cb89395afd8a9e3012ad59b12c` (Orekit 13.1.6 C++ port).
+```powershell
+cd 'D:\two orbits collision rate\distribution_propagator'
+$env:PATH = 'C:\msys64\ucrt64\bin;' + $env:PATH
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release `
+  -DCMAKE_CXX_COMPILER=C:/msys64/ucrt64/bin/g++.exe `
+  -DDSST_SOURCE_DIR=D:/orekit/DSST-cpp
+cmake --build build --parallel 6
+ctest --test-dir build --output-on-failure -j 1
+```
+
+For Windows GCC, the build copies its matching C++/GCC/pthread runtime DLLs
+beside the executables, so running them does not depend on global `PATH` order.
+Keep those three DLLs with the executable if you move it. This prevents the
+`nanosleep64` entry-point error caused by older runtime DLLs from applications
+such as Meld. For Visual Studio omit `-G Ninja` and the compiler argument, then
+build with `--config Release` and test with `-C Release`. On other platforms set
+`DSST_SOURCE_DIR` to your native C++ checkout. No dependency is downloaded or
+modified. The audited revision is `e653cd40e5e057cb89395afd8a9e3012ad59b12c`
+(Orekit 13.1.6 port); the build records that revision in output metadata.
+
+## Run and visualize
+
+```powershell
+.\build\distribution_propagator.exe --config examples/meo_ball.cfg --output outputs/meo-ball
+Start-Process .\outputs\meo-ball\visualization.html
+```
+
+This deliberately broad demonstration uses isotropic 100 km position and 1 m/s
+velocity standard deviations in RTN, around a 26,560 km semimajor-axis orbit
+with eccentricity 0.02 and inclination 55°. It propagates 5,000 particles for
+60 days with J2/J2-squared. This is **not a measured OD covariance**.
+
+The offline viewer provides rotation, wheel zoom, shift-drag pan, orbital-plane
+and edge-on views, cloud framing, exact-snapshot playback, a phase histogram and
+time histories. Particle IDs remain stable. Displayed particles are a bounded
+subset; metrics use all samples. Playback does not invent interpolated states.
+
+| Example | Purpose |
+|---|---|
+| `examples/meo_ball.cfg` | Visible ball-to-ribbon demonstration |
+| `examples/meo_energy_shear.cfg` | Controlled two-body phase-shear experiment |
+| `examples/meo_correlated.cfg` | Smaller correlated covariance over ten years, conditional on J2/J2² |
+
+```powershell
+.\build\distribution_propagator.exe --write-example my-orbit.cfg
+.\build\distribution_propagator.exe --config my-orbit.cfg --output outputs/my-orbit `
+  --samples 20000 --threads 8 --accuracy-check 16
+.\build\distribution_propagator.exe --help
+```
+
+Output directories must be absent or empty. Other overrides include `--seed`,
+`--duration-days`, `--output-step-days`, `--no-html` and `--export-states`.
+With no config the built-in broad equinoctial MEO demonstration is used.
+
+## Inputs
+
+Configuration uses one `key = value` per line, with `#` comments. Unknown and
+duplicate keys are rejected. Paths are relative to the configuration file.
+Units are SI, except explicit degree/day keys. All states share epoch zero
+and a common inertial equatorial frame. No Earth-fixed transform or absolute
+ephemeris date is implied. Choose exactly one nominal orbit representation:
+
+```text
+orbit_keplerian_deg = a_m, eccentricity, inclination_deg, RAAN_deg, argument_perigee_deg, mean_anomaly_deg
+orbit_equinoctial = a_m, ex, ey, hx, hy, mean_longitude_rad
+orbit_cartesian = x_m, y_m, z_m, vx_m_s, vy_m_s, vz_m_s
+```
+
+Here `ex=e*cos(ω+Ω)`, `ey=e*sin(ω+Ω)`, `hx=tan(i/2)*cos(Ω)`,
+`hy=tan(i/2)*sin(Ω)`, and `lambda=M+ω+Ω`. Exact retrograde singularities,
+nonfinite/unbound orbits and perigees below the configured floor are rejected.
+The default 1,000 km altitude floor is a screen, not a universal no-drag guarantee.
+Use `initial_type=osculating` for ordinary instantaneous OD states, or `mean`
+for force-consistent DSST mean elements. `output_type=osculating` reconstructs
+short-period geometry; `mean` is an explicitly labelled secular view.
+
+Choose Gaussian `sigma` (six standard deviations) or `covariance_csv` (a full
+six-by-six symmetric positive semidefinite matrix, headerless numeric rows).
+Position/velocity correlation and zero-variance axes are retained without jitter.
+
+| `uncertainty_coordinates` | Order |
+|---|---|
+| `equinoctial` | `[a,ex,ey,hx,hy,lambda]` in metres/dimensionless/radians |
+| `cartesian` | Inertial `[x,y,z,vx,vy,vz]` in metres and metres/second |
+| `rtn` | Nominal epoch `[dr,dt,dn,dvr,dvt,dvn]` in metres and metres/second |
+
+RTN velocity entries are **inertial velocity errors resolved in the nominal RTN
+basis**, not derivatives of rotating positions. Transform a covariance with a
+different convention before use. Each sampled complete state is nonlinearly
+converted to elements before any mean/osculating conversion. Invalid samples
+stop with an index; no clipping or redrawing changes the specified posterior.
+
+Alternatively set `empirical_samples_csv` instead of a covariance. Each
+headerless six-value row has equal weight. Equinoctial/Cartesian rows are
+absolute states; RTN rows are offsets. Every row is used; `--samples` is rejected.
+Equinoctial longitudes preserve explicit winding numbers. Cartesian longitudes
+are lifted near the nominal branch because Cartesian states lack winding history.
+
+## Coverage, mixing and sampling
+
+Metrics use continuous **mean longitude relative to the nominal orbit** and its
+modulo-2π phase. For eccentric orbits, uniform mean phase is not uniform true
+anomaly or spatial density. Default milestones are:
+
+- Central 95% unwrapped width (97.5th minus 2.5th percentile) reaches 2π.
+- Coverage: largest empty phase gap ≤5° and all 72 bins occupied.
+- Mixing: coverage, all four resultants `R1..R4 ≤0.05`, and histogram total
+  variation from uniform ≤0.15. Multiple harmonics detect symmetric lobes.
+
+Crossings require three consecutive passing snapshots by default. Reports give
+the first passing epoch and its preceding epoch as a **sampled onset bracket**,
+not a continuous-time root or confidence interval. Refine cadence near the
+crossing. Unobserved/unconfirmed events are `null`. These diagnostics depend
+on count and thresholds, and a finite ensemble can later recur or fail a test.
+
+An analytic Gaussian Kepler-shear comparison uses initial sampled mean elements,
+including phase/rate covariance. It is a time-scale estimate, not the complete
+numerical mixing condition. Mathematical Gaussian tails make “first nonzero
+possibility anywhere” unsuitable as a finite-sample criterion.
+
+Use **2,000–5,000 samples for exploration** and **20,000–50,000 for ordinary
+studies**, then compare doubled counts and at least three independent seeds.
+At 95% confidence the DKW one-epoch CDF bound is about 1.92% for 5,000 IID
+samples and 0.96% for 20,000. It is not a wrap-time or multivariate shape bound.
+Rare tails require more particles; a bin of probability `p` has relative
+counting error approximately `sqrt((1-p)/(N*p))`.
+
+## Accuracy and performance
+
+Models `kepler`, `j2`, and `j2_j2sq` use native DSST force formulas. An adaptive
+Dormand–Prince 5(4) driver advances mean elements because the translated shell
+only offers fixed-step RK4. Short-period terms are initialized before initial
+mean conversion and reconstructed at exact output epochs. Default tolerances
+are relative `1e-11`, absolute semimajor-axis `0.001 m`, and other-element
+`1e-12`, with a one-day maximum step. Longitude error scaling remains bounded
+as revolution count grows. No fast-math flags or simplified force equations are
+used. Native Hansen polynomial objects are reused instead of rebuilt each rate
+evaluation; every orbit-dependent coefficient is still recomputed.
+
+`--accuracy-check N` reruns N particles with 10× tighter tolerances and a 4×
+smaller maximum step, comparing position and phase at all output epochs.
+This tests numerical convergence **within the selected model**. The independent
+one-year Java Orekit fixture and its gates are documented in
+[tests/data/README.md](tests/data/README.md).
+
+No drag, higher gravity harmonics, tesseral resonances, Sun/Moon gravity, solar
+radiation pressure, maneuvers, updates or process noise are included. Long-span
+results are conditional model experiments, not certified real-object forecasts.
+Add and validate forces needed by a real mission's error budget separately.
+
+Each worker owns its mutable DSST objects; shared constructor caches are locked.
+Samples are generated once from a specified `mt19937_64`/Box–Muller stream.
+Worker count does not change results; larger counts preserve the same-seed
+prefix. `max_memory_mb` preflights states, analysis, display and serialization
+storage, but is not a hard OS cap. Reduce displayed particles or output cadence
+before reducing the scientific count. HTML/JSON writing is serial.
+
+## Outputs and tests
+
+| File | Contents |
+|---|---|
+| `summary.json` | Events/brackets, count, runtime, integration work and numerical checks |
+| `metrics.csv` | All-ensemble epoch statistics and RTN spreads |
+| `initial_samples.csv` | Exact input equinoctial samples and stable IDs |
+| `run.json` | Versioned settings/model provenance, metrics and display subset |
+| `visualization.html` | Offline interactive report |
+| `states.csv` | Optional complete Cartesian ensemble, position and velocity |
+
+Global Cartesian/RTN covariance loses a local along-track interpretation after
+wrapping. Metrics also include residual RTN spreads after matching the reference
+ellipse at each particle's output mean longitude. This describes thickness
+relative to that ellipse, not a nearest-point fit or proof of a thin tube.
+
+Release-active tests cover orbit oracles, covariance moments, angle branch cuts,
+equal-energy no-shear, non-Gaussian lobes, thread determinism, mean/osculating
+round trips, tolerance refinement, Java parity and full CLI workflows.
+The upstream Java fixture comparator is also built without changing its gates.
+If its generated CSV is unavailable, those tests are explicitly skipped.
+`DISTRIBUTION_UPSTREAM_TESTS=ON` enables every upstream test; one current zonal
+test passes a temporary to a mutable reference and GCC rejects it. Default
+application/reference targets do not depend on that compiler-specific test.
+
+For browser QA with Node, Playwright and Chrome/Chromium:
+
+```powershell
+node tools/test_viewer.cjs outputs/meo-ball/visualization.html --screenshot-dir build/viewer-qa
+```
+
+See [DESCRIPTION.md](DESCRIPTION.md) for extension points and
+[docs/SCIENCE.md](docs/SCIENCE.md) for derivations and primary-source references.

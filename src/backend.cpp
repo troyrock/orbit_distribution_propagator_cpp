@@ -84,6 +84,9 @@ std::mutex& construction_mutex() {
 struct Backend::Impl {
     BackendConfig config;
     dsst::DSSTPropagator propagator{std::any{}, "OSCULATING"};
+    std::shared_ptr<dsst::forces::DSSTZonal> zonal;
+    std::shared_ptr<dsst::forces::DSSTJ2SquaredClosedForm> j2_squared;
+    std::unique_ptr<dsst::forces::DSSTZonal::HansenObjects> zonal_hansen;
     Elements current{};
     Elements first_rate{};
     BackendStats statistics;
@@ -122,11 +125,13 @@ struct Backend::Impl {
             // and short-period calculations then use per-instance storage.
             {
                 std::lock_guard<std::mutex> lock(construction_mutex());
-                propagator.addForceModel(std::make_shared<dsst::forces::DSSTZonal>(gravity));
+                zonal = std::make_shared<dsst::forces::DSSTZonal>(gravity);
+                propagator.addForceModel(zonal);
             }
             if (config.force_model == "j2_j2sq") {
-                propagator.addForceModel(std::make_shared<dsst::forces::DSSTJ2SquaredClosedForm>(
-                    dsst::forces::ZeisModel{}, gravity));
+                j2_squared = std::make_shared<dsst::forces::DSSTJ2SquaredClosedForm>(
+                    dsst::forces::ZeisModel{}, gravity);
+                propagator.addForceModel(j2_squared);
             }
         }
         auto orbit = make_orbit(initial, 0.0, config.mu);
@@ -139,11 +144,33 @@ struct Backend::Impl {
         current = elements(orbit);
         validate_elements(current);
         propagator.beforeIntegration(make_orbit(current, 0.0, config.mu));
+        if (zonal) {
+            zonal_hansen = std::make_unique<dsst::forces::DSSTZonal::HansenObjects>(zonal->createHansenObjects());
+        }
         next_step = std::min(config.max_step_s, std::max(config.min_step_s, 3600.0));
     }
 
     Elements rates(const Elements& state, double date) {
-        const auto native = propagator.computeDerivatives(make_orbit(state, date, config.mu));
+        const auto orbit = make_orbit(state, date, config.mu);
+        const dsst::utilities::AuxiliaryElements auxiliary(orbit, dsst::DSSTPropagator::I);
+        std::vector<double> native(6, 0.0);
+        if (zonal) {
+            // DSSTZonal::getMeanElementRate reconstructs invariant Hansen
+            // polynomial tables on every call. Keep those tables per particle;
+            // createUAnddU still recomputes every orbit-dependent Hansen root.
+            // These are the same native method calls, in the same order, as the
+            // uncached port. Degree-2 truncation sizes are fixed for all states.
+            const auto context = zonal->initializeStep(auxiliary);
+            const auto potential = zonal->createUAnddU(orbit.date, context, auxiliary, *zonal_hansen);
+            native = zonal->computeMeanElementRates(context, potential);
+        }
+        if (j2_squared) {
+            const auto second_order = j2_squared->getMeanElementRate(auxiliary);
+            for (std::size_t i = 0; i < 6; ++i) native[i] += second_order[i];
+        }
+        // Keep the shell's summation order: zonal, J2-squared, Newtonian.
+        const auto central = propagator.elementRates(propagator.getAllForceModels().back(), auxiliary);
+        for (std::size_t i = 0; i < 6; ++i) native[i] += central[i];
         ++statistics.derivative_evaluations;
         Elements result{};
         for (std::size_t i = 0; i < result.size(); ++i) {

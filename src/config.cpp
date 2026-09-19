@@ -114,6 +114,11 @@ Config read_config(const std::filesystem::path& path) {
 }
 void validate_config(const Config& c) {
     const auto positive=[](double x){return std::isfinite(x)&&x>0;};
+    const auto& b=c.backend;
+    if(!positive(b.mu) || !positive(b.earth_radius_m) || !positive(b.relative_tolerance) || !positive(b.absolute_tolerance_m) || !positive(b.absolute_tolerance_elements) || !positive(b.min_step_s) || !positive(b.max_step_s) || b.min_step_s>b.max_step_s || !std::isfinite(b.j2) || b.j2<0)
+        throw std::invalid_argument("Invalid DSST constants, tolerance or step limits");
+    if((b.force_model!="kepler" && b.force_model!="j2" && b.force_model!="j2_j2sq") || (b.initial_type!="mean" && b.initial_type!="osculating") || (b.output_type!="mean" && b.output_type!="osculating"))
+        throw std::invalid_argument("Invalid force_model, initial_type or output_type");
     if(c.samples<2 || c.samples>100000000 || c.threads>1024 || c.phase_bins<4 || c.phase_bins>100000 || c.persistence==0)
         throw std::invalid_argument("Invalid sample/thread/bin/persistence count");
     if(!positive(c.duration_days) || !positive(c.output_step_days) || !positive(c.max_memory_mb) || c.duration_days*day>1e13 || c.duration_days/c.output_step_days>1000000)
