@@ -1,0 +1,5 @@
+/build*/
+/outputs/
+*.pyc
+__pycache__/
+/tools/node_modules/
