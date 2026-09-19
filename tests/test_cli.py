@@ -159,6 +159,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual([frame["time_s"] for frame in run["frames"]], [0, .4*DAY, .8*DAY, 1.05*DAY])
         self.assertEqual(len(read_csv(output / "metrics.csv")), 4)
         self.assertEqual(len(read_elements(output / "initial_samples.csv")), 32)
+        self.assertEqual(summary["accuracy_checked_samples"], 0)
+        self.assertIsNone(summary["accuracy_max_position_m"])
+        self.assertIsNone(summary["accuracy_max_phase_rad"])
         for key in ("coverage_time_s", "mixing_time_s", "analytic_mixing_time_s", "coverage_bracket_s",
                     "mixing_bracket_s", "sample_count", "frame_count", "threads_used", "elapsed_seconds",
                     "accuracy_max_position_m", "accuracy_max_phase_rad"):
@@ -195,6 +198,7 @@ class CliTests(unittest.TestCase):
         output, run, summary = self.run_case({"sigma": None, "empirical_samples_csv": csv_path.name,
             "samples": 99, "duration_days": 18.5, "output_step_days": 6, "visual_samples": 20})
         self.assertEqual(summary["sample_count"], len(elements), "Empirical rows must not be resampled to configured samples")
+        self.assertIsNone(run["metadata"]["covariance"], "Empirical inputs must not advertise an unused Gaussian covariance")
         self.assertEqual(read_elements(output / "initial_samples.csv"), elements)
         nominal_rate = math.sqrt(MU / A**3)
         for frame in run["frames"]:
@@ -256,8 +260,9 @@ class CliTests(unittest.TestCase):
             with self.subTest(mode=mode):
                 source = self.root / f"{mode}.csv"
                 source.write_text("\n".join(",".join(map(repr,row)) for row in rows))
-                output, _, _ = self.run_case({"sigma": None,"empirical_samples_csv": source.name,
+                output, run, _ = self.run_case({"sigma": None,"empirical_samples_csv": source.name,
                     "uncertainty_coordinates": mode,"duration_days": .001,"output_step_days": .001})
+                self.assertIsNone(run["metadata"]["covariance"])
                 recovered = list(map(cartesian_from_equinoctial,read_elements(output / "initial_samples.csv")))
                 for actual, expected in zip(recovered, absolute):
                     self.assertLess(math.dist(actual[:3],expected[:3]),1e-5)
@@ -279,6 +284,7 @@ class CliTests(unittest.TestCase):
         _, run, summary = self.run_case({"sigma": None,"empirical_samples_csv": source.name,
             "coverage_max_gap_deg": 6,"persistence": 2,"visual_samples": 8})
         self.assertEqual(summary["coverage_time_s"],0)
+        self.assertIsNone(run["metadata"]["covariance"])
         self.assertEqual(summary["mixing_time_s"],0)
         self.assertEqual(summary["coverage_bracket_s"],[0,0])
         self.assertEqual(summary["mixing_bracket_s"],[0,0])

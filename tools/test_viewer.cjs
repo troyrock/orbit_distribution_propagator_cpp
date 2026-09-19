@@ -24,7 +24,7 @@ function syntheticData() {
     return {time_s:j*30*86400,positions_m:angles.map((p,i)=>point(p+j*.3,a+150*Math.sin(i*7.31),100*Math.cos(i*5.17))),reference_orbit_m:reference,
       metrics:{phase_sigma_rad:width/Math.sqrt(12),phase_q95_width_rad:width*.95,resultants,max_gap_deg:Math.max(.6,360-width*180/Math.PI),occupied_fraction:histogram.filter(x=>x>0).length/72,histogram,rtn_sigma_m:[120,Math.max(150,width*a/3),70],coverage:j>=11,mixed:j>=14}};
   });
-  return {schema_version:1,metadata:{samples:count,visual_samples:count,force_model:'Synthetic viewer test (not a propagation result)',input_type:'mean',output_type:'osculating',seed:42,mu:3.986004418e14,earth_radius_m:6378137,elapsed_seconds:1.23,phase_definition:'Relative mean longitude modulo 360°. Counts use all samples.',coverage_definition:'Synthetic coverage flag for UI testing.',mixing_definition:'Synthetic mixing flag for UI testing.'},frames,summary:{coverage_time_s:frames[11].time_s,mixing_time_s:frames[14].time_s,analytic_mixing_time_s:350*86400}};
+  return {schema_version:1,metadata:{samples:count,visual_samples:count,force_model:'Synthetic viewer test (not a propagation result)',input_type:'mean',output_type:'osculating',seed:Number('9007199254740997'),seed_string:'9007199254740997',mu:3.986004418e14,earth_radius_m:6378137,elapsed_seconds:1.23,phase_definition:'Relative mean longitude modulo 360°. Counts use all samples.',coverage_definition:'Synthetic coverage flag for UI testing.',mixing_definition:'Synthetic mixing flag for UI testing.'},frames,summary:{coverage_time_s:frames[11].time_s,mixing_time_s:frames[14].time_s,analytic_mixing_time_s:350*86400}};
 }
 
 async function main() {
@@ -51,6 +51,8 @@ async function main() {
     await page.waitForFunction(()=>window.distributionViewer?.ready===true);
     await page.waitForFunction(()=>Number(document.getElementById('scene').dataset.renderedPoints)>0);
     assert.equal(await page.locator('#error').isVisible(),false);
+    if(temporary)assert((await page.locator('#normalization').textContent()).includes('9007199254740997'),
+      'The exact uint64 seed must survive JavaScript number rounding.');
     const total=await page.evaluate(()=>JSON.parse(document.getElementById('simulation-data').textContent).frames.length);
     const capture=async name=>{if(screenshotDir)await page.screenshot({path:path.join(screenshotDir,name+'.png'),fullPage:true});};
     const noOverflow=async()=>assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+1),'Layout must fit viewport width.');
@@ -72,6 +74,17 @@ async function main() {
     assert((await page.evaluate(()=>window.distributionViewer.pan)).some(Math.abs),'Shift-drag must pan.');
     await page.click('#reset');assert.equal(await page.evaluate(()=>window.distributionViewer.zoom),1);
     await page.selectOption('#framing','orbit');await page.selectOption('#view','plane');
+    // Prefer an epoch near a quarter-orbit phase width to show the actual early arc.
+    // This only selects a saved snapshot; it does not manufacture intermediate positions.
+    const earlyIndex=await page.evaluate(()=>{
+      const frames=JSON.parse(document.getElementById('simulation-data').textContent).frames;
+      let best=0,distance=Infinity;
+      frames.forEach((f,i)=>{const d=Math.abs(f.metrics.phase_q95_width_rad-Math.PI/2);if(d<distance){best=i;distance=d;}});
+      return best;
+    });
+    await page.locator('#time').fill(String(earlyIndex));
+    await page.waitForFunction(i=>Number(document.getElementById('scene').dataset.epochIndex)===i,earlyIndex);
+    await capture('desktop-early-banana');
     await page.locator('#time').fill(String(total-1));
     await page.waitForFunction(i=>window.distributionViewer.index===i,total-1);
     assert.equal(await page.locator('#next').isDisabled(),true);

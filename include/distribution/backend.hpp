@@ -42,19 +42,19 @@ struct BackendStats {
 // serializes the upstream zonal coefficient cache; distinct instances may
 // subsequently advance concurrently. Do not call one instance concurrently.
 class Backend {
-public:
-    Backend(const BackendConfig& config, const Elements& initial);
+  public:
+    Backend(const BackendConfig &config, const Elements &initial);
     ~Backend();
-    Backend(Backend&&) noexcept;
-    Backend& operator=(Backend&&) noexcept;
-    Backend(const Backend&) = delete;
-    Backend& operator=(const Backend&) = delete;
+    Backend(Backend &&) noexcept;
+    Backend &operator=(Backend &&) noexcept;
+    Backend(const Backend &) = delete;
+    Backend &operator=(const Backend &) = delete;
 
     BackendState advance(double elapsed_seconds);
-    const BackendStats& stats() const noexcept;
+    const BackendStats &stats() const noexcept;
     double time() const noexcept;
 
-private:
+  private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
 };

@@ -59,7 +59,7 @@
  $('phase-definition').textContent=meta.phase_definition||'Phase angles binned over one complete revolution; counts use the full ensemble.';
  $('definitions').textContent='The view shows '+fmt(meta.visual_samples??points(frames[0]).length,0)+' stable representative sample identities. All statistics and the phase histogram use the full ensemble of '+fmt(meta.samples,0)+' propagated samples. Input states: '+(meta.input_type||'unspecified')+'. Output states: '+(meta.output_type||'unspecified')+'.';
  $('criteria').textContent=[meta.coverage_definition,meta.mixing_definition].filter(Boolean).join(' ');
- $('normalization').textContent='Seed: '+(meta.seed??'unspecified')+' · Propagation runtime: '+(finite(meta.elapsed_seconds)?fmt(meta.elapsed_seconds,2)+' s':'unspecified')+' · '+frames.length+' saved epochs.';
+ $('normalization').textContent='Seed: '+(meta.seed_string??meta.seed??'unspecified')+' · Propagation runtime: '+(finite(meta.elapsed_seconds)?fmt(meta.elapsed_seconds,2)+' s':'unspecified')+' · '+frames.length+' saved epochs.';
  $('coverage-time').textContent=elapsed(summary.coverage_time_s);$('mixing-time').textContent=elapsed(summary.mixing_time_s);$('analytic-time').textContent=finite(summary.analytic_mixing_time_s)?elapsed(summary.analytic_mixing_time_s):'Not available';
  $('time').max=frames.length-1;$('duration-label').textContent=elapsed(frames.at(-1).time_s);
  const resize=c=>{const r=c.getBoundingClientRect(),dpr=Math.min(window.devicePixelRatio||1,2);if(c.width!==Math.round(r.width*dpr)||c.height!==Math.round(r.height*dpr)){c.width=Math.round(r.width*dpr);c.height=Math.round(r.height*dpr);}const cc=c.getContext('2d');cc.setTransform(dpr,0,0,dpr,0,0);return [cc,r.width,r.height];};

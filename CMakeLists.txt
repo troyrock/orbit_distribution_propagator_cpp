@@ -80,6 +80,9 @@ if(BUILD_TESTING)
   if(Python3_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli.py")
     add_test(NAME distribution_cli COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli.py" "$<TARGET_FILE:distribution_propagator>")
   endif()
+  if(Python3_FOUND AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_study.py")
+    add_test(NAME distribution_study COMMAND "${Python3_EXECUTABLE}" -B "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_study.py" "$<TARGET_FILE:distribution_propagator>" "${CMAKE_CURRENT_SOURCE_DIR}/tools/study.py")
+  endif()
 endif()
 
 # Windows searches beside the executable before PATH. Deploy only the matching

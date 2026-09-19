@@ -9,6 +9,10 @@ uncertainty creates different orbital periods. Coverage and near-uniform mixing
 are different events. Read [the scientific critique](docs/SCIENCE.md) and
 [the algorithms and data structures](DESCRIPTION.md).
 
+Measured example results, sample-count convergence and validation evidence are
+in [docs/VALIDATION.md](docs/VALIDATION.md). For the broad demonstration, the
+20,000-particle study found mixing at 16.25–16.5 days for all three tested seeds.
+
 ## Build
 
 Requires CMake 3.20+, a C++17 compiler and the external native DSST checkout.
@@ -142,6 +146,16 @@ samples and 0.96% for 20,000. It is not a wrap-time or multivariate shape bound.
 Rare tails require more particles; a bin of probability `p` has relative
 counting error approximately `sqrt((1-p)/(N*p))`.
 
+Run repeatable sample/seed/cadence and thread studies with the standard-library
+Python driver; [docs/STUDIES.md](docs/STUDIES.md) explains its outputs and checks:
+
+```powershell
+python tools/study.py --exe build/distribution_propagator.exe `
+  --config examples/meo_ball.cfg --output outputs/my-study `
+  --counts 2000,5000,20000 --seeds 11,22,33 --threads 8 `
+  --cadences 0.5,0.25 --benchmark-threads 1,2,4,8
+```
+
 ## Accuracy and performance
 
 Models `kepler`, `j2`, and `j2_j2sq` use native DSST force formulas. An adaptive
@@ -193,6 +207,10 @@ equal-energy no-shear, non-Gaussian lobes, thread determinism, mean/osculating
 round trips, tolerance refinement, Java parity and full CLI workflows.
 The upstream Java fixture comparator is also built without changing its gates.
 If its generated CSV is unavailable, those tests are explicitly skipped.
+Its gravity checks also need the adjacent Orekit Java source test resource
+`potential/shm-format/eigen_cg03c_coef`; the build copies the data into its test
+directory. With a standalone C++ checkout lacking that resource, set
+`-DDISTRIBUTION_OREKIT_FIXTURES=OFF` and retain this project's independent fixture.
 `DISTRIBUTION_UPSTREAM_TESTS=ON` enables every upstream test; one current zonal
 test passes a temporary to a mutable reference and GCC rejects it. Default
 application/reference targets do not depend on that compiler-specific test.

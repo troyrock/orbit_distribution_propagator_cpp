@@ -19,12 +19,13 @@ using namespace distribution;
 constexpr double mu = 3.986004418e14;
 
 // Throwing checks stay active when Release builds define NDEBUG.
-void require(bool condition, const std::string& context) {
-    if (!condition) throw std::runtime_error(context);
+void require(bool condition, const std::string &context) {
+    if (!condition)
+        throw std::runtime_error(context);
 }
 
-void near(double actual, double expected, double absolute_tolerance,
-          double relative_tolerance, const std::string& context) {
+void near(double actual, double expected, double absolute_tolerance, double relative_tolerance,
+          const std::string &context) {
     const double tolerance = absolute_tolerance + relative_tolerance * std::abs(expected);
     if (!std::isfinite(actual) || !std::isfinite(expected) ||
         std::abs(actual - expected) > tolerance) {
@@ -35,21 +36,24 @@ void near(double actual, double expected, double absolute_tolerance,
     }
 }
 
-template<class Function>
-void rejects(Function&& function, const std::string& context) {
+template <class Function> void rejects(Function &&function, const std::string &context) {
     try {
         function();
-    } catch (const std::invalid_argument&) {
+    } catch (const std::invalid_argument &) {
         return;
     }
     throw std::runtime_error(context + ": expected std::invalid_argument");
 }
 
-Vector3 position(const Cartesian& state) { return {state[0], state[1], state[2]}; }
-Vector3 velocity(const Cartesian& state) { return {state[3], state[4], state[5]}; }
+Vector3 position(const Cartesian &state) {
+    return {state[0], state[1], state[2]};
+}
+Vector3 velocity(const Cartesian &state) {
+    return {state[3], state[4], state[5]};
+}
 
-void compare_states(const Cartesian& actual, const Cartesian& expected,
-                    const std::string& context) {
+void compare_states(const Cartesian &actual, const Cartesian &expected,
+                    const std::string &context) {
     for (std::size_t k = 0; k < actual.size(); ++k) {
         near(actual[k], expected[k], k < 3 ? 3e-6 : 3e-9, 2e-12,
              context + " coordinate " + std::to_string(k));
@@ -62,14 +66,12 @@ void test_circular_orbit() {
     for (double phase : {0.0, pi / 2.0, pi, 3.0 * pi / 2.0}) {
         const Elements elements{radius, 0, 0, 0, 0, phase};
         const Cartesian expected{radius * std::cos(phase), radius * std::sin(phase), 0,
-                                 -speed * std::sin(phase), speed * std::cos(phase), 0};
+                                 -speed * std::sin(phase), speed * std::cos(phase),  0};
         compare_states(to_cartesian(elements, mu), expected, "analytic circular state");
         const auto reconstructed = from_cartesian(expected, mu);
         near(reconstructed[0], radius, 1e-6, 2e-15, "circular semimajor axis");
-        near(std::hypot(reconstructed[1], reconstructed[2]), 0, 1e-14, 0,
-             "circular eccentricity");
-        near(std::remainder(reconstructed[5] - phase, tau), 0, 2e-14, 0,
-             "circular phase");
+        near(std::hypot(reconstructed[1], reconstructed[2]), 0, 1e-14, 0, "circular eccentricity");
+        near(std::remainder(reconstructed[5] - phase, tau), 0, 2e-14, 0, "circular phase");
     }
     const auto basis = rtn_basis(Cartesian{radius, 0, 0, 0, speed, 0});
     for (std::size_t i = 0; i < 3; ++i) {
@@ -81,9 +83,11 @@ void test_circular_orbit() {
 
 // Independent classical perifocal construction avoids validating two mutually
 // consistent but incorrect equinoctial conversion routines against each other.
-struct ClassicalCase { double a, e, inclination, node, argument, true_anomaly; };
+struct ClassicalCase {
+    double a, e, inclination, node, argument, true_anomaly;
+};
 
-Cartesian perifocal_oracle(const ClassicalCase& c) {
+Cartesian perifocal_oracle(const ClassicalCase &c) {
     const double cn = std::cos(c.node), sn = std::sin(c.node);
     const double cw = std::cos(c.argument), sw = std::sin(c.argument);
     const double ci = std::cos(c.inclination), si = std::sin(c.inclination);
@@ -102,20 +106,18 @@ Cartesian perifocal_oracle(const ClassicalCase& c) {
 }
 
 void test_eccentric_inclined_orbits() {
-    const std::array<ClassicalCase, 5> cases{{
-        {26560000, .2, .7, 1.1, 2.3, -.9},
-        {42164000, .01, .05, -.8, .3, 2.5},
-        {42000000, .65, 1.2, 2.2, -1.7, pi},
-        {70000000, .7, 2.6, -.3, 1.9, -2.2},
-        {100000000, .9, 1.57, 3.1, .1, 1e-4}
-    }};
-    for (const auto& c : cases) {
-        const double eccentric_anomaly = 2 * std::atan2(
-            std::sqrt(1 - c.e) * std::sin(c.true_anomaly / 2),
-            std::sqrt(1 + c.e) * std::cos(c.true_anomaly / 2));
+    const std::array<ClassicalCase, 5> cases{{{26560000, .2, .7, 1.1, 2.3, -.9},
+                                              {42164000, .01, .05, -.8, .3, 2.5},
+                                              {42000000, .65, 1.2, 2.2, -1.7, pi},
+                                              {70000000, .7, 2.6, -.3, 1.9, -2.2},
+                                              {100000000, .9, 1.57, 3.1, .1, 1e-4}}};
+    for (const auto &c : cases) {
+        const double eccentric_anomaly =
+            2 * std::atan2(std::sqrt(1 - c.e) * std::sin(c.true_anomaly / 2),
+                           std::sqrt(1 + c.e) * std::cos(c.true_anomaly / 2));
         const double mean_anomaly = eccentric_anomaly - c.e * std::sin(eccentric_anomaly);
-        const auto elements = from_keplerian(c.a, c.e, c.inclination, c.node,
-                                             c.argument, mean_anomaly);
+        const auto elements =
+            from_keplerian(c.a, c.e, c.inclination, c.node, c.argument, mean_anomaly);
         const auto expected = perifocal_oracle(c);
         const auto actual = to_cartesian(elements, mu);
         compare_states(actual, expected, "independent perifocal oracle");
@@ -130,12 +132,10 @@ void test_eccentric_inclined_orbits() {
 
         const auto r = position(actual), v = velocity(actual), h = cross(r, v);
         const double h_expected = std::sqrt(mu * c.a * (1 - c.e * c.e));
-        near(dot(v, v) / 2 - mu / norm(r), -mu / (2 * c.a), 1e-7, 2e-12,
-             "specific energy");
+        near(dot(v, v) / 2 - mu / norm(r), -mu / (2 * c.a), 1e-7, 2e-12, "specific energy");
         near(norm(h), h_expected, 1e-4, 3e-13, "angular momentum magnitude");
         const Vector3 normal{std::sin(c.inclination) * std::sin(c.node),
-                             -std::sin(c.inclination) * std::cos(c.node),
-                             std::cos(c.inclination)};
+                             -std::sin(c.inclination) * std::cos(c.node), std::cos(c.inclination)};
         for (std::size_t k = 0; k < 3; ++k) {
             near(h[k] / norm(h), normal[k], 5e-14, 0, "orbital plane normal");
         }
@@ -144,49 +144,50 @@ void test_eccentric_inclined_orbits() {
         const auto basis = rtn_basis(actual);
         for (std::size_t i = 0; i < 3; ++i) {
             for (std::size_t j = 0; j < 3; ++j) {
-                near(dot(basis[i], basis[j]), i == j ? 1 : 0, 2e-14, 0,
-                     "RTN orthonormality");
+                near(dot(basis[i], basis[j]), i == j ? 1 : 0, 2e-14, 0, "RTN orthonormality");
             }
         }
     }
 }
 
 void test_invalid_orbits() {
-    rejects([] { to_cartesian(Elements{7000000, 1, 0, 0, 0, 0}, mu); },
-            "parabolic state");
+    rejects([] { to_cartesian(Elements{7000000, 1, 0, 0, 0, 0}, mu); }, "parabolic state");
     rejects([] { to_cartesian(Elements{7000000, 0, 0, 0, 0, 0}, -mu); },
             "negative gravitational parameter");
     rejects([] { from_cartesian(Cartesian{}, mu); }, "zero Cartesian state");
-    rejects([] { from_cartesian(Cartesian{7000000, 0, 0, 1, 0, 0}, mu); },
-            "zero angular momentum");
-    rejects([] { from_keplerian(7000000, .01, pi, 0, 0, 0); },
-            "retrograde singularity");
+    rejects([] { from_cartesian(Cartesian{7000000, 0, 0, 1, 0, 0}, mu); }, "zero angular momentum");
+    rejects([] { from_keplerian(7000000, .01, pi, 0, 0, 0); }, "retrograde singularity");
     rejects([] { validate_elements(Elements{7000000, .2, 0, 0, 0, 0}, mu, 6500000); },
             "perigee floor");
-    rejects([] { to_cartesian(Elements{7000000, 0, 0, 0, 0,
-                std::numeric_limits<double>::quiet_NaN()}, mu); }, "nonfinite longitude");
+    rejects(
+        [] {
+            to_cartesian(Elements{7000000, 0, 0, 0, 0, std::numeric_limits<double>::quiet_NaN()},
+                         mu);
+        },
+        "nonfinite longitude");
 }
 
-Matrix6 product_with_transpose(const Matrix6& a) {
+Matrix6 product_with_transpose(const Matrix6 &a) {
     Matrix6 product{};
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            for (std::size_t k = 0; k < 6; ++k) product[i][j] += a[i][k] * a[j][k];
+            for (std::size_t k = 0; k < 6; ++k)
+                product[i][j] += a[i][k] * a[j][k];
         }
     }
     return product;
 }
 
-void check_factor(const Matrix6& covariance) {
+void check_factor(const Matrix6 &covariance) {
     const auto factor = covariance_factor(covariance);
     const auto reconstructed = product_with_transpose(factor);
     for (std::size_t i = 0; i < 6; ++i) {
         for (std::size_t j = 0; j < 6; ++j) {
-            const double natural_scale = std::sqrt(covariance[i][i]) *
-                                         std::sqrt(covariance[j][j]);
-            near(reconstructed[i][j], covariance[i][j],
-                 2e-12 * natural_scale + 1e-300, 0, "PSD covariance reconstruction");
-            if (j > i) near(factor[i][j], 0, 0, 0, "factor is lower triangular");
+            const double natural_scale = std::sqrt(covariance[i][i]) * std::sqrt(covariance[j][j]);
+            near(reconstructed[i][j], covariance[i][j], 2e-12 * natural_scale + 1e-300, 0,
+                 "PSD covariance reconstruction");
+            if (j > i)
+                near(factor[i][j], 0, 0, 0, "factor is lower triangular");
         }
     }
 }
@@ -195,29 +196,30 @@ void test_covariance_factor() {
     // Twelve orders of magnitude in standard deviations exercise SI scaling;
     // the final row is exactly deterministic, with a zero variance.
     const std::array<double, 6> scales{1e6, 3e3, 7e2, 2e-3, 4e-6, 0};
-    Matrix6 factor{{
-        {{1, 0, 0, 0, 0, 0}},
-        {{.3, std::sqrt(.91), 0, 0, 0, 0}},
-        {{.2, -.15, std::sqrt(.9375), 0, 0, 0}},
-        {{.4, -.3, 0, std::sqrt(.75), 0, 0}},
-        {{-.2, .25, 0, .1, std::sqrt(.8875), 0}},
-        {{0, 0, 0, 0, 0, 0}}
-    }};
+    Matrix6 factor{{{{1, 0, 0, 0, 0, 0}},
+                    {{.3, std::sqrt(.91), 0, 0, 0, 0}},
+                    {{.2, -.15, std::sqrt(.9375), 0, 0, 0}},
+                    {{.4, -.3, 0, std::sqrt(.75), 0, 0}},
+                    {{-.2, .25, 0, .1, std::sqrt(.8875), 0}},
+                    {{0, 0, 0, 0, 0, 0}}}};
     for (std::size_t i = 0; i < 6; ++i)
-        for (double& value : factor[i]) value *= scales[i];
+        for (double &value : factor[i])
+            value *= scales[i];
     check_factor(product_with_transpose(factor));
 
     Matrix6 rank_one{};
     const std::array<double, 6> direction{1e6, -.001, .5, 0, 3, 1e-6};
     for (std::size_t i = 0; i < 6; ++i)
-        for (std::size_t j = 0; j < 6; ++j) rank_one[i][j] = direction[i] * direction[j];
+        for (std::size_t j = 0; j < 6; ++j)
+            rank_one[i][j] = direction[i] * direction[j];
     check_factor(rank_one);
     check_factor(Matrix6{});
 }
 
 void test_invalid_covariances() {
     Matrix6 covariance{};
-    for (std::size_t i = 0; i < 6; ++i) covariance[i][i] = 1;
+    for (std::size_t i = 0; i < 6; ++i)
+        covariance[i][i] = 1;
     auto invalid = covariance;
     invalid[0][1] = invalid[1][0] = 1.1;
     rejects([&] { covariance_factor(invalid); }, "indefinite covariance");
@@ -300,7 +302,8 @@ void test_same_energy_has_no_keplerian_phase_shear() {
         elements[5] += n * elapsed;
         final_phase.push_back(elements[5]);
         const auto state = to_cartesian(elements, mu);
-        const double energy = dot(velocity(state), velocity(state)) / 2 - mu / norm(position(state));
+        const double energy =
+            dot(velocity(state), velocity(state)) / 2 - mu / norm(position(state));
         near(energy, -mu / (2 * a), 1e-6, 3e-13, "equal-energy ensemble member");
     }
     const auto before = phase_metrics(initial_phase, 72);
@@ -358,7 +361,7 @@ void test_dkw_and_invalid_statistics() {
     rejects([] { quantile_sorted({}, .5); }, "empty quantile input");
     rejects([] { quantile_sorted({1, 2}, 1.1); }, "invalid quantile fraction");
 }
-}
+} // namespace
 
 int main() {
     const std::vector<std::pair<std::string, std::function<void()>>> tests{
@@ -369,16 +372,16 @@ int main() {
         {"invalid covariance rejection", test_invalid_covariances},
         {"circular harmonics and branch cut", test_circular_statistics},
         {"uniform phase and unwrapped width", test_uniform_phase_and_unwrapped_width},
-        {"equal energy has no Keplerian phase shear", test_same_energy_has_no_keplerian_phase_shear},
+        {"equal energy has no Keplerian phase shear",
+         test_same_energy_has_no_keplerian_phase_shear},
         {"sustained onset intervals", test_onset_intervals},
-        {"DKW bounds and invalid statistics", test_dkw_and_invalid_statistics}
-    };
+        {"DKW bounds and invalid statistics", test_dkw_and_invalid_statistics}};
     std::size_t failed = 0;
-    for (const auto& test : tests) {
+    for (const auto &test : tests) {
         try {
             test.second();
             std::cout << "PASS: " << test.first << '\n';
-        } catch (const std::exception& error) {
+        } catch (const std::exception &error) {
             ++failed;
             std::cerr << "FAIL: " << test.first << ": " << error.what() << '\n';
         }

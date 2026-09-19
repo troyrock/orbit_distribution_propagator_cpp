@@ -366,6 +366,11 @@ See [docs/SCIENCE.md](docs/SCIENCE.md) for derivations and convergence guidance.
 
 ## Output contract and visualization
 
+For empirical ensembles, metadata `covariance` is `null`: the unused Gaussian
+configuration matrix does not describe the supplied particles. Accuracy-error
+fields are `null` when `accuracy_checked_samples` is zero, rather than reporting
+an unmeasured zero error.
+
 | Artifact | Contents |
 | --- | --- |
 | `run.json` | Schema version 1; metadata/configuration and native DSST revision; summary; per-frame display positions, reference ellipse, and full-ensemble diagnostics. |
@@ -409,6 +414,9 @@ Tests use throwing checks that remain active in Release builds. The suites cover
 - `test_cli.py`: executable-level options, artifacts/schema, exact Kepler
   ensemble behavior, thread-count reproducibility, empirical/covariance input,
   no artificial mixing at zero covariance, and rejected invalid runs.
+- `test_study.py`: actual study invocations, Cartesian products of run settings,
+  byte-identical thread benchmarks, null/zero event conventions and failed-child
+  checkpoint retention.
 - `backend_probe.cpp` and the versioned Orekit fixture: 32 comparisons spanning
   J2 and J2-plus-J2-squared, mean/osculating input/output, and 0/1/30/365-day
   epochs. Optional upstream fixture groups provide additional native-formula
