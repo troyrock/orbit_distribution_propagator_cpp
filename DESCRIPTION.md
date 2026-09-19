@@ -69,7 +69,7 @@ for an equinoctial element covariance without a coordinate transformation.
 | `Config` | Backend settings, nominal orbit, covariance or empirical path, sample/worker/display counts, time grid, diagnostic thresholds, memory budget, and export options. |
 | `SampleState` | Six output elements plus continuous mean longitude and mean semimajor axis. Keeping both mean quantities makes phase diagnostics independent of short-period output excursions. |
 | `PhaseMetrics` | Unwrapped phase standard deviation and central 95% width, four circular harmonics, largest gap, occupancy, histogram total variation, and bin counts. |
-| `Frame` | One output time, nominal reference state, complete-ensemble diagnostics, display particle positions, and a sampled reference ellipse. |
+| `Frame` | One output time, nominal reference state, complete-ensemble diagnostics, display particle positions, a sampled reference ellipse, and its six selected-output reference elements. |
 | `EventInterval` | Whether a sustained event was found, its preceding/current output times, and the index at which persistence was confirmed. |
 | `Simulation` | Effective configuration, initial members, all retained states/frames, event intervals, analytic estimate, timing, and validation statistics. |
 
@@ -373,7 +373,7 @@ an unmeasured zero error.
 
 | Artifact | Contents |
 | --- | --- |
-| `run.json` | Schema version 1; metadata/configuration and native DSST revision; summary; per-frame display positions, reference ellipse, and full-ensemble diagnostics. |
+| `run.json` | Schema version 1; metadata/configuration and native DSST revision; summary; per-frame display positions, reference ellipse/elements, and full-ensemble diagnostics. |
 | `summary.json` | Sample/epoch/worker counts, elapsed time, event times and intervals, analytic estimate, DKW information, accuracy-check results, and native step counters. |
 | `metrics.csv` | One row per output epoch, with time, unwrapped/circular phase statistics, RTN and phase-matched residual spreads, semimajor spread, and current-frame flags. |
 | `initial_samples.csv` | Every absolute initial equinoctial member with a header and particle identifier. To reuse it as six-column empirical input, remove the header/identifier column. |
@@ -394,6 +394,77 @@ Playback steps through saved epochs; it does not invent interpolated particle
 trajectories. Colors retain particle identities and do not encode probability
 density. The reference curve is an instantaneous nominal ellipse, not a particle
 trail or a force-integrated full revolution.
+
+### Local cross-section geometry
+
+Each frame also exports `reference_elements = [a,ex,ey,hx,hy,lambda]` for the
+same instantaneous nominal orbit used by `reference_orbit_m`. Its mean or
+osculating interpretation follows `metadata.output_type`. This additive schema
+version 1 field lets the viewer follow plane/perigee precession and evaluate
+positions and tangents analytically instead of differentiating the sampled
+polyline. If these elements are missing or invalid, the new panel is disabled
+with a regeneration message; the original scene, diagnostics, and playback
+remain available. Initial `metadata.nominal_elements` are not substituted for
+later reference geometry.
+
+Let `P,Q` be orthonormal periapsis/transverse vectors in the nominal orbital
+plane, `N=P cross Q`, `e` its eccentricity, and `p=a*(1-e^2)`. At selected true
+anomaly `f`, the reference position, velocity direction, and section axes are:
+
+```text
+r_ref(f) = p/(1+e*cos(f)) * (cos(f)*P + sin(f)*Q)
+v_ref(f) = sqrt(mu/p) * (-sin(f)*P + (e+cos(f))*Q)
+T(f) = unit(v_ref(f))
+X(f) = unit(T(f) cross N)       # horizontal, in-plane normal to travel
+Y    = N                      # vertical, normal to the orbital plane
+```
+
+The two plot axes are perpendicular to travel. `X` differs from radial away
+from the apsides of an eccentric orbit. For `e < 1e-12`, the angle origin uses
+the equinoctial x-axis instead of an undefined periapsis. The 0°–360° slider
+sets `f`; follow mode solves the nominal Kepler equation to locate the nominal
+position at each saved epoch. Changing the angle manually disables following.
+
+For each displayed Cartesian position `r_i`, projection into the current
+reference plane gives its angular location `f_i`. A particle is selected when
+
+```text
+abs(atan2(sin(f_i-f), cos(f_i-f))) <= full_slice_width/2
+```
+
+with a small roundoff allowance at the boundary. The full width ranges from
+1° to 40° and defaults to 10°. This wrapped angular selection excludes the
+opposite orbital branch and is continuous across 0°/360°. Positions with an
+undefined in-plane angle are not selected.
+
+The default curvature correction subtracts the reference position at each
+particle's projected angle and transports its local transverse components to
+the chosen section:
+
+```text
+delta_i = r_i - r_ref(f_i)
+x_i = dot(delta_i, X(f_i))
+y_i = dot(delta_i, N)
+```
+
+Thus particles lying exactly on the reference ellipse have zero corrected
+width. With correction off, the raw projection instead uses
+`delta_i = r_i-r_ref(f)`, `x_i=dot(delta_i,X(f))`, and `y_i=dot(delta_i,N)`.
+A circular reference segment with half-width `h` alone then produces an
+inward offset `a*(1-cos(h))`: about 101 km for a 10° full slice at
+`a=26,560 km`. The mode labels distinguish this geometric broadening from
+distribution thickness. Neither mode propagates, interpolates, or changes
+particle positions; the same saved epoch drives both views.
+
+Cross-section points use only the exported display subset and preserve its
+particle IDs/colors. Counts always state selected versus displayed samples;
+fewer than 20 selected points trigger a sparse-slice message. Equal scales on
+both axes preserve shape, while the automatic extent changes between slices.
+Larger widths include more particles but combine more orbital locations. The
+view is not a density estimate, confidence contour, or full-ensemble statistic.
+Its true-angle matching and axes also differ from `tube_rtn_sigma_m`, which
+uses output mean longitude and RTN axes over the complete ensemble. Existing
+metrics, event detection, and saved-epoch playback semantics are unchanged.
 
 ## Tests and extension points
 

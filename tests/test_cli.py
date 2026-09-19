@@ -175,6 +175,42 @@ class CliTests(unittest.TestCase):
         self.command("--config", config, "--output", output, success=False)
         self.assertEqual(before, {p.name: p.read_bytes() for p in output.iterdir() if p.is_file()})
 
+    def test_reference_elements_follow_output_type_and_reference_geometry(self):
+        # Identical particles are an independent observation of the nominal
+        # reference. Exercise perturbed mean and osculating output, since the
+        # latter changes the reference ellipse at every epoch.
+        nominal = [A, .1, .06, .4, .2, .7]
+        by_type = {}
+        for output_type in ("mean", "osculating"):
+            with self.subTest(output_type=output_type):
+                _, run, _ = self.run_case({
+                    "force_model": "j2_j2sq", "initial_type": "mean",
+                    "output_type": output_type,
+                    "orbit_equinoctial": ",".join(map(str, nominal)),
+                    "sigma": "0,0,0,0,0,0", "samples": 2, "visual_samples": 2,
+                    "duration_days": 1.05, "output_step_days": .4,
+                })
+                self.assertEqual(run["metadata"]["output_type"], output_type)
+                by_type[output_type] = run["frames"]
+                for frame in run["frames"]:
+                    elements = frame["reference_elements"]
+                    self.assertEqual(len(elements), 6)
+                    self.assertTrue(all(math.isfinite(x) for x in elements))
+                    expected = cartesian_from_equinoctial(elements)[:3]
+                    for point in frame["positions_m"]:
+                        self.assertLess(math.dist(point, expected), 1e-5)
+                    # Validate the exported ellipse against a separate
+                    # classical-elements conversion at several longitudes.
+                    for index in (0, 23, 91, 145, 180):
+                        curve_elements = elements[:5] + [index * TAU / 180]
+                        expected_curve = cartesian_from_equinoctial(curve_elements)[:3]
+                        self.assertLess(math.dist(frame["reference_orbit_m"][index],
+                                                  expected_curve), 1e-5)
+                self.assertGreater(run["frames"][-1]["reference_elements"][5], TAU)
+        self.assertEqual(by_type["mean"][0]["reference_elements"], nominal)
+        self.assertGreater(math.dist(by_type["mean"][-1]["positions_m"][0],
+                                     by_type["osculating"][-1]["positions_m"][0]), 1.0)
+
     def test_deterministic_across_thread_counts(self):
         first, r1, s1 = self.run_case({"samples": 64, "threads": 1}, extra=("--export-states",))
         second, r4, s4 = self.run_case({"samples": 64, "threads": 4}, extra=("--export-states",))

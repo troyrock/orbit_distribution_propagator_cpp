@@ -82,6 +82,33 @@ and edge-on views, cloud framing, exact-snapshot playback, a phase histogram and
 time histories. Particle IDs remain stable. Displayed particles are a bounded
 subset; metrics use all samples. Playback does not invent interpolated states.
 
+The **Local cross-section** panel looks along the nominal direction of travel
+to show the distribution's width in the perpendicular plane. The **Orbit angle**
+slider places the section anywhere from 0° to 360° around the current reference
+ellipse; an amber marker and highlighted arc locate it in the main orbit view.
+Angles are true anomaly from perigee, or from the equinoctial x-axis for a
+circular orbit. **Follow nominal position** is initially enabled; moving the
+angle slider disables following. The **Full slice width** slider selects a
+1°–40° angular neighborhood (10° initially).
+
+**Remove reference-orbit curvature** is enabled by default. It aligns local
+offsets after subtracting the reference ellipse at each selected particle's
+angle, so a perfectly thin reference orbit has zero width. Turn it off to see
+the raw projection onto one plane; a finite angular slice then includes
+apparent width from the orbit's curvature. Both plot axes use the same distance
+scale and automatically fit each slice. These are transverse sample offsets,
+not a probability contour or a full-ensemble covariance.
+
+The panel reports selected/displayed counts and flags sparse slices. For a
+roughly uniform angular cloud, a 10° slice contains only about 42 of 1,500
+displayed particles. Add `--visual-samples 5000` to a run with at least 5,000
+particles to get about 139 in that slice, or increase the display count further
+for denser shape inspection. Counts vary with angle and are not uniform in
+true anomaly for eccentric orbits. Wider slices improve counts but average
+over more orbital locations. Reports created before per-epoch reference
+elements were added must be regenerated to enable this panel; their existing
+3D view and playback remain supported.
+
 | Example | Purpose |
 |---|---|
 | `examples/meo_ball.cfg` | Visible ball-to-ribbon demonstration |

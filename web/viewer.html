@@ -10,6 +10,10 @@
 @media(max-width:1000px){.layout{grid-template-columns:minmax(0,1fr) 295px;padding:0 16px 20px;gap:12px}header{padding:20px 16px 14px}.scene-wrap{min-height:360px}.toolbar .spacer{display:none}.stats{gap:12px 8px}.stat .value{font-size:21px}}
 @media(max-width:760px){header{display:block}h1{font-size:23px}.run-info{text-align:left;margin-top:10px}.badge{margin:0 5px 4px 0}.layout{grid-template-columns:1fr}.scene-wrap{height:430px;min-height:300px}aside{display:grid;grid-template-columns:1fr 1fr}aside .metric-panel{grid-column:1/-1}.stats{grid-template-columns:repeat(4,1fr)}.bottom{grid-template-columns:1fr;gap:17px}.time-controls #snapshot{min-width:72px;font-size:10px}.scene-foot{font-size:10px}.toolbar{gap:7px}.toolbar label{font-size:11px}.scene-label strong{font-size:21px}}
 @media(max-width:430px){aside{display:flex}.stats{grid-template-columns:1fr 1fr}.toolbar{display:grid;grid-template-columns:1fr 1fr}.toolbar label{min-width:0}.toolbar label:nth-child(-n+2){display:block}.toolbar label:nth-child(-n+2) select{display:block;width:100%;margin-top:4px}.toolbar button{justify-self:start}.scene-wrap{height:370px}.time-controls label{font-size:0}.time-controls label select{font-size:11px}.scene-foot .hints{display:none}}
+.section-heading{display:flex;justify-content:space-between;gap:16px;align-items:baseline}.section-heading h2{font-size:18px;margin:0 0 4px;font-weight:550}.section-heading .subtle{font-size:12px}.section-grid{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:22px;margin-top:16px}.section-plot{position:relative;min-width:0;background:#0c1828;border:1px solid var(--line);border-radius:9px;overflow:hidden}#section-scene{width:100%;height:350px}.section-controls{display:flex;flex-direction:column;gap:15px;min-width:0}.section-control label{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:12px}.section-control output{color:var(--fg);font-variant-numeric:tabular-nums}.section-control input[type=range]{display:block;margin:9px 0 0}.section-check{display:flex;align-items:center;gap:7px;font-size:12px}.section-count{font-size:23px;line-height:1.25;font-variant-numeric:tabular-nums}.section-count-note,.section-note{color:var(--muted);font-size:11px}.section-note{margin-top:5px}.section-legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:11px;color:var(--muted)}.section-legend .legend-dot{background:var(--amber)}.section-warning{min-height:32px;color:var(--amber);font-size:12px}.section-mode{color:var(--cyan);font-size:11px;margin-top:4px}.section-controls input:disabled{opacity:.45;cursor:default}
+@media(max-width:900px){.section-grid{grid-template-columns:minmax(0,1fr) 260px;gap:14px}}
+@media(max-width:650px){.section-heading{display:block}.section-grid{grid-template-columns:1fr}#section-scene{height:310px}.section-controls{display:grid;grid-template-columns:1fr 1fr;gap:14px}.section-controls .section-summary,.section-controls .section-explanation{grid-column:1/-1}}
+@media(max-width:430px){.section-controls{display:flex}.section-heading h2{font-size:17px}}
 </style>
 </head>
 <body>
@@ -26,6 +30,20 @@
  <section class="panel pad"><h2 class="section-title">Orbital phase occupancy</h2><canvas id="histogram" class="chart" aria-label="Histogram of orbital phase at the selected epoch"></canvas><p class="chart-note" id="phase-definition"></p></section>
  <section class="panel pad"><h2 class="section-title">Evolution over time</h2><canvas id="history" class="chart" aria-label="Circular resultant and occupied phase fraction over time"></canvas><div class="chart-key"><span class="cyan">— Occupied fraction</span><span class="amber">— R₁</span></div><p class="chart-note">Small R₁ means little first-harmonic concentration; higher harmonics and coverage also matter.</p></section>
 </aside>
+<section class="panel pad wide" aria-label="Local distribution cross-section">
+ <div class="section-heading"><div><h2>Local cross-section</h2><p class="subtle">Look along the reference direction of travel to inspect the distribution's width.</p></div><div class="section-mode" id="section-mode"></div></div>
+ <div class="section-grid">
+  <div><div class="section-plot"><canvas id="section-scene" aria-label="Local cross-section: in-plane normal-to-travel offset horizontally, orbit-normal offset vertically. Equal distance scale on both axes."></canvas></div><div class="section-legend"><span><i class="legend-dot"></i>Amber marker locates the section in the orbit view</span><span>+ Reference orbit center</span></div></div>
+  <div class="section-controls">
+   <div class="section-control"><label for="section-angle">Orbit angle <output id="section-angle-value" for="section-angle">0.0°</output></label><input id="section-angle" type="range" min="0" max="360" step="0.1" value="0" aria-label="Cross-section orbital angle in degrees"><p class="section-note" id="section-angle-definition"></p></div>
+   <div class="section-control"><label for="section-width">Full slice width <output id="section-width-value" for="section-width">10.0°</output></label><input id="section-width" type="range" min="1" max="40" step="0.5" value="10" aria-label="Full angular width of the cross-section slice"></div>
+   <label class="section-check"><input id="section-follow" type="checkbox" checked> Follow nominal position</label>
+   <label class="section-check"><input id="section-curvature" type="checkbox" checked> Remove reference-orbit curvature</label>
+   <div class="section-summary"><div class="section-count" id="section-count">0 particles</div><p class="section-count-note" id="section-count-note"></p><p class="section-warning" id="section-warning" role="status"></p></div>
+   <div class="section-explanation"><p class="section-note" id="section-explanation"></p><p class="section-note">The plot uses the displayed particle subset, not a probability contour. Wider slices include more samples. Both axes have equal distance scales and automatically fit each slice.</p></div>
+  </div>
+ </div>
+</section>
 <section class="panel pad wide"><div class="bottom"><div><div class="result-title">First sampled coverage</div><div class="result-value" id="coverage-time"></div><div class="result-note">First saved epoch meeting the configured coverage criterion.</div></div><div><div class="result-title">First sampled phase mixing</div><div class="result-value" id="mixing-time"></div><div class="result-note">First saved epoch meeting the configured phase mixing criterion.</div></div><div><div class="result-title">Keplerian shear estimate</div><div class="result-value" id="analytic-time"></div><div class="result-note">An analytic estimate for the initial uncertainty; see the run configuration for its threshold.</div></div></div><details class="definitions"><summary>How to interpret this visualization</summary><p id="definitions"></p><p id="criteria"></p><p>Coverage is operational and depends on the ensemble size, angular bins, thresholds, and saved-epoch cadence. A finite Monte Carlo sample cannot prove positive probability at every angle. An angularly broad cloud may retain radial and vertical structure or coherent correlations. True anomaly need not be uniformly distributed even when mean orbital phase is well mixed.</p><p>Focus cloud automatically recenters and rescales each saved epoch. Whole orbit uses one fixed scale across the run. The curve is an instantaneous reference orbit, not the trajectory of an individual sample. Dim particles behind Earth remain visible when Hidden points is enabled. Colors track stable sample identities and do not indicate probability density.</p><p id="normalization"></p></details></section>
 </main>
 <script type="application/json" id="simulation-data">__DISTRIBUTION_DATA__</script>
@@ -57,12 +75,137 @@
  $('sample-count').textContent=fmt(meta.samples,0)+' propagated samples · '+fmt(meta.visual_samples??points(frames[0]).length,0)+' displayed';
  $('force-model').textContent=meta.force_model||'DSST propagation';
  $('phase-definition').textContent=meta.phase_definition||'Phase angles binned over one complete revolution; counts use the full ensemble.';
- $('definitions').textContent='The view shows '+fmt(meta.visual_samples??points(frames[0]).length,0)+' stable representative sample identities. All statistics and the phase histogram use the full ensemble of '+fmt(meta.samples,0)+' propagated samples. Input states: '+(meta.input_type||'unspecified')+'. Output states: '+(meta.output_type||'unspecified')+'.';
+ $('definitions').textContent='The view shows '+fmt(meta.visual_samples??points(frames[0]).length,0)+' stable representative sample identities. The ensemble metrics and phase histogram use all '+fmt(meta.samples,0)+' propagated samples. Input states: '+(meta.input_type||'unspecified')+'. Output states: '+(meta.output_type||'unspecified')+'.';
  $('criteria').textContent=[meta.coverage_definition,meta.mixing_definition].filter(Boolean).join(' ');
  $('normalization').textContent='Seed: '+(meta.seed_string??meta.seed??'unspecified')+' · Propagation runtime: '+(finite(meta.elapsed_seconds)?fmt(meta.elapsed_seconds,2)+' s':'unspecified')+' · '+frames.length+' saved epochs.';
  $('coverage-time').textContent=elapsed(summary.coverage_time_s);$('mixing-time').textContent=elapsed(summary.mixing_time_s);$('analytic-time').textContent=finite(summary.analytic_mixing_time_s)?elapsed(summary.analytic_mixing_time_s):'Not available';
  $('time').max=frames.length-1;$('duration-label').textContent=elapsed(frames.at(-1).time_s);
  const resize=c=>{const r=c.getBoundingClientRect(),dpr=Math.min(window.devicePixelRatio||1,2);if(c.width!==Math.round(r.width*dpr)||c.height!==Math.round(r.height*dpr)){c.width=Math.round(r.width*dpr);c.height=Math.round(r.height*dpr);}const cc=c.getContext('2d');cc.setTransform(dpr,0,0,dpr,0,0);return [cc,r.width,r.height];};
+ // Local orbit geometry uses this epoch's selected output elements, never the
+ // initial nominal orbit: J2 precession can rotate the reference over time.
+ const wrapAngle=a=>((a%TAU)+TAU)%TAU;
+ const subtract=(a,b)=>a.map((v,j)=>v-b[j]);
+ const linear=(a,b,x,y)=>a.map((v,j)=>x*v+y*b[j]);
+ let section={available:false,source:'unavailable',points:[],selectedCount:0,displayedCount:0};
+ function sectionOrbit(frame){
+  const e=frame.reference_elements;
+  if(!Array.isArray(e)||e.length!==6||!e.every(finite)||!finite(meta.mu)||meta.mu<=0)return null;
+  const [a,ex,ey,q,p,longitude]=e,ecc=Math.hypot(ex,ey),den=1+p*p+q*q;
+  if(a<=0||ecc>=1||Math.hypot(q,p)>1e6)return null;
+  const u=[(1-p*p+q*q)/den,2*p*q/den,-2*p/den];
+  const v=[2*p*q/den,(1+p*p-q*q)/den,2*q/den];
+  const normal=unit(cross(u,v)),physicalPeriapsis=ecc===0?0:Math.atan2(ey,ex);
+  const periapsis=ecc<1e-12?0:physicalPeriapsis,latus=a*(1-ecc*ecc);
+  // Bracketed Kepler solve only locates the nominal object for follow mode.
+  const mean=wrapAngle(longitude-physicalPeriapsis+Math.PI)-Math.PI;
+  let lower=mean-ecc,upper=mean+ecc,E=mean;
+  for(let k=0;k<100;k++){
+   const residual=E-ecc*Math.sin(E)-mean;
+   if(Math.abs(residual)<2e-15)break;
+   if(residual>0)upper=E;else lower=E;
+   const trial=E-residual/(1-ecc*Math.cos(E));
+   E=trial>lower&&trial<upper?trial:(lower+upper)/2;
+  }
+  const nominalAngle=wrapAngle(Math.atan2(Math.sqrt(1-ecc*ecc)*Math.sin(E),Math.cos(E)-ecc)+physicalPeriapsis-periapsis);
+  return {a,ecc,ex,ey,u,v,normal,periapsis,latus,nominalAngle};
+ }
+ function sectionAt(geometry,angle){
+  const longitude=angle+geometry.periapsis,cs=Math.cos(longitude),sn=Math.sin(longitude);
+  const radius=geometry.latus/(1+geometry.ex*cs+geometry.ey*sn);
+  const anchor=linear(geometry.u,geometry.v,radius*cs,radius*sn),speed=Math.sqrt(meta.mu/geometry.latus);
+  const velocity=linear(geometry.u,geometry.v,speed*(-sn-geometry.ey),speed*(cs+geometry.ex));
+  const travel=unit(velocity),xAxis=unit(cross(travel,geometry.normal));
+  return {anchor,velocity,travel,xAxis};
+ }
+ function updateSection(){
+  const frame=frames[index],geometry=sectionOrbit(frame),following=$('section-follow').checked;
+  const widthDeg=Number($('section-width').value),curvatureCorrected=$('section-curvature').checked;
+  let angleDeg=wrapAngle(Number($('section-angle').value)*Math.PI/180)*180/Math.PI;
+  const displayedCount=points(frame).length;
+  for(const id of ['section-angle','section-width','section-follow','section-curvature'])$(id).disabled=!geometry;
+  if(geometry&&following){angleDeg=geometry.nominalAngle*180/Math.PI;$('section-angle').value=angleDeg.toFixed(1);}
+  section={available:!!geometry,source:geometry?'elements':'unavailable',angleDeg,widthDeg,following,
+           curvatureCorrected,displayedCount,selectedCount:0,points:[],anchor:null,velocity:null,normal:null,xAxis:null};
+  $('section-angle-value').textContent=fmt(angleDeg,1)+'°';
+  $('section-width-value').textContent=fmt(widthDeg,1)+'°';
+  $('section-mode').textContent=curvatureCorrected?'Curvature-corrected section':'Raw projection';
+  $('section-angle-definition').textContent=geometry&&geometry.ecc<1e-12
+   ?'Circular orbit: angle from the reference equinoctial x-axis.'
+   :'True anomaly of the reference ellipse: 0° at perigee, 180° at apogee.';
+  if(geometry){
+   const angle=angleDeg*Math.PI/180,location=sectionAt(geometry,angle),halfWidth=widthDeg*Math.PI/360;
+   Object.assign(section,{anchor:location.anchor,velocity:location.velocity,normal:geometry.normal,xAxis:location.xAxis});
+   // Keep only the local angular branch. An infinite tangent-normal slab alone
+   // would also admit particles on the opposite side of a circular orbit.
+   (frame.positions_m||[]).forEach((position,id)=>{
+    if(!validPoint(position))return;
+    const px=dot(position,geometry.u),py=dot(position,geometry.v);
+    if(Math.hypot(px,py)<1e-12)return;
+    const particleAngle=Math.atan2(py,px)-geometry.periapsis;
+    const difference=Math.atan2(Math.sin(particleAngle-angle),Math.cos(particleAngle-angle));
+    if(Math.abs(difference)>halfWidth+1e-12)return;
+    const delta=subtract(position,location.anchor),depth=dot(delta,location.travel);
+    let x,y;
+    if(curvatureCorrected){
+     // Remove only reference curvature. Transport each particle's transverse
+     // components to the selected section; do not propagate or interpolate it.
+     const matched=sectionAt(geometry,particleAngle),residual=subtract(position,matched.anchor);
+     x=dot(residual,matched.xAxis);y=dot(residual,geometry.normal);
+    }else{x=dot(delta,location.xAxis);y=dot(delta,geometry.normal);}
+    if(finite(x)&&finite(y)&&finite(depth))section.points.push({id,x,y,depth});
+   });
+   section.selectedCount=section.points.length;
+  }
+  $('section-count').textContent=fmt(section.selectedCount,0)+(section.selectedCount===1?' particle':' particles');
+  $('section-count-note').textContent='of '+fmt(displayedCount,0)+' displayed · ±'+fmt(widthDeg/2,2)+'° about selected angle';
+  $('section-warning').textContent=!geometry?'This report has no reference orbit elements. Regenerate it with the current simulator to enable cross-sections.'
+   :displayedCount===0?'No display particles were exported. Increase visual_samples and regenerate the report.'
+   :section.selectedCount===0?'No displayed particles in this slice. Move the angle or widen the slice.'
+   :section.selectedCount<20?'Sparse slice: widen it or export more display particles to inspect the shape.':'';
+  $('section-explanation').textContent=curvatureCorrected
+   ?'Reference curvature is removed at each particle’s angle. Local normal-to-travel and orbit-normal offsets are transported into this section; a perfectly thin reference orbit has zero width.'
+   :'Particles in the angular slice are projected onto one plane perpendicular to travel at the amber marker. A finite slice includes apparent width from orbit curvature.';
+ }
+ function drawSection(){
+  const canvas=$('section-scene'),[c,w,h]=resize(canvas);c.clearRect(0,0,w,h);
+  const left=66,right=20,top=25,bottom=54,ww=Math.max(1,w-left-right),hh=Math.max(1,h-top-bottom);
+  let extent=.001;
+  for(const p of section.points)extent=Math.max(extent,Math.abs(p.x)*1.15,Math.abs(p.y)*1.15);
+  const power=10**Math.floor(Math.log10(extent));
+  extent=[1,2,5,10].find(n=>n*power>=extent)*power;
+  const scale=Math.min(ww,hh)/(2*extent),cx=left+ww/2,cy=top+hh/2;
+  const unitSize=extent>=1000?1000:1,unitName=unitSize===1000?'km':'m';
+  const digits=Math.max(0,Math.min(6,1-Math.floor(Math.log10(extent/unitSize))));
+  c.font='10px system-ui';c.lineWidth=1;
+  for(let k=-2;k<=2;k++){
+   const value=k*extent/2,x=cx+value*scale,y=cy-value*scale;
+   c.strokeStyle=k===0?'#466079':'#25374c';c.beginPath();
+   c.moveTo(x,cy-extent*scale);c.lineTo(x,cy+extent*scale);
+   c.moveTo(cx-extent*scale,y);c.lineTo(cx+extent*scale,y);c.stroke();
+   c.fillStyle='#a7b8ca';c.textAlign='center';c.fillText(fmt(value/unitSize,digits),x,cy+extent*scale+17);
+   c.textAlign='right';c.fillText(fmt(value/unitSize,digits),cx-extent*scale-8,y+3);
+  }
+  c.save();c.beginPath();c.rect(cx-extent*scale-3,cy-extent*scale-3,2*extent*scale+6,2*extent*scale+6);c.clip();
+  for(const p of section.points){
+   const hue=173+70*p.id/Math.max(1,section.displayedCount-1);
+   c.fillStyle='hsla('+hue+',78%,76%,.8)';c.beginPath();c.arc(cx+p.x*scale,cy-p.y*scale,section.points.length>1000?1.5:2.4,0,TAU);c.fill();
+  }
+  c.restore();c.strokeStyle='#ffc17b';c.lineWidth=1.5;c.beginPath();c.moveTo(cx-5,cy);c.lineTo(cx+5,cy);c.moveTo(cx,cy-5);c.lineTo(cx,cy+5);c.stroke();
+  c.fillStyle='#c6d7e6';c.font='11px system-ui';c.textAlign='center';
+  c.fillText('In-plane normal-to-travel offset ('+unitName+')',left+ww/2,h-12);
+  c.save();c.translate(16,top+hh/2);c.rotate(-Math.PI/2);c.fillText('Orbit-normal offset ('+unitName+')',0,0);c.restore();
+  c.font='10px system-ui';c.textAlign='left';c.fillStyle='#a7b8ca';c.fillText('Equal scale · '+elapsed(frames[index].time_s),12,15);
+  if(!section.available||!section.selectedCount){
+   c.fillStyle='rgba(12,24,40,.9)';c.fillRect(cx-94,cy-29,188,58);c.fillStyle='#a7b8ca';c.textAlign='center';c.font='12px system-ui';
+   c.fillText(section.available?'No samples in this slice':'Reference data unavailable',cx,cy+4);
+  }
+  canvas.dataset.available=String(section.available);canvas.dataset.selectedCount=section.selectedCount;
+  canvas.dataset.epochIndex=index;canvas.dataset.extentM=extent;
+ }
+ $('section-angle').addEventListener('input',()=>{$('section-follow').checked=false;updateSection();dirty=true;});
+ $('section-width').addEventListener('input',()=>{updateSection();dirty=true;});
+ $('section-follow').addEventListener('change',()=>{updateSection();dirty=true;});
+ $('section-curvature').addEventListener('change',()=>{updateSection();dirty=true;});
  function transform(p){let v=p;if($('view').value!=='free')v=[dot(p,bx),dot(p,by),dot(p,bn)];const cy=Math.cos(yaw),sy=Math.sin(yaw),cp=Math.cos(pitch),sp=Math.sin(pitch),x=cy*v[0]+sy*v[2],z=-sy*v[0]+cy*v[2];return [x,cp*v[1]-sp*z,sp*v[1]+cp*z];}
  function drawScene(){
   const [,w,h]=resize(canvas);ctx.clearRect(0,0,w,h);const f=frames[index],ps=points(f),ref=orbit(f);let center=[0,0,0],extent=orbitExtent*1.12;
@@ -81,6 +224,19 @@
   const radius=ps.length>5000?1:ps.length>1000?1.3:1.9;const showHidden=$('hidden-particles').checked;
   const projected=ps.map((p,i)=>({p:project(p),i})).sort((a,b)=>a.p[3]-b.p[3]);let drawn=0;
   for(const item of projected){const p=item.p;if(p[0]<-5||p[0]>w+5||p[1]<-5||p[1]>h+5)continue;const dx=p[0]-ep[0],dy=p[1]-ep[1],inside=dx*dx+dy*dy<er*er,occluded=inside&&p[3]<Math.sqrt(Math.max(0,earth*earth-(dx*dx+dy*dy)/(sc*sc)));if(occluded&&!showHidden)continue;const hue=173+70*(item.i/Math.max(1,ps.length-1));ctx.fillStyle='hsla('+hue+',78%,76%,'+(occluded?.25:.84)+')';ctx.beginPath();ctx.arc(p[0],p[1],radius,0,TAU);ctx.fill();drawn++;}
+  // Locate the selected section and angular window in the main orbit view.
+  if(section.available){
+   const g=sectionOrbit(f),a=section.angleDeg*Math.PI/180,half=section.widthDeg*Math.PI/360;
+   ctx.strokeStyle='#ffc17b';ctx.lineWidth=2.5;ctx.beginPath();
+   for(let k=0;k<=30;k++){const q=project(sectionAt(g,a-half+2*half*k/30).anchor);if(k)ctx.lineTo(q[0],q[1]);else ctx.moveTo(q[0],q[1]);}ctx.stroke();
+   const size=g.a*.025,corners=[[-1,-1],[1,-1],[1,1],[-1,1]];
+   ctx.beginPath();corners.forEach(([x,y],k)=>{const q=project(section.anchor.map((v,j)=>v+size*(x*section.xAxis[j]+y*section.normal[j])));if(k)ctx.lineTo(q[0],q[1]);else ctx.moveTo(q[0],q[1]);});
+   ctx.closePath();ctx.fillStyle='rgba(255,193,123,.1)';ctx.fill();ctx.strokeStyle='rgba(255,193,123,.7)';ctx.lineWidth=1;ctx.stroke();
+   const q=project(section.anchor);ctx.fillStyle='#ffc17b';ctx.beginPath();ctx.arc(q[0],q[1],4,0,TAU);ctx.fill();
+   const direction=unit(section.velocity),tip=project(section.anchor.map((v,j)=>v+direction[j]*g.a*.09));
+   const dx=tip[0]-q[0],dy=tip[1]-q[1],distance=Math.hypot(dx,dy);
+   if(distance>12){ctx.strokeStyle='#ffc17b';ctx.beginPath();ctx.moveTo(q[0],q[1]);ctx.lineTo(tip[0],tip[1]);ctx.moveTo(tip[0]-6*dx/distance+3*dy/distance,tip[1]-6*dy/distance-3*dx/distance);ctx.lineTo(tip[0],tip[1]);ctx.lineTo(tip[0]-6*dx/distance-3*dy/distance,tip[1]-6*dy/distance+3*dx/distance);ctx.stroke();ctx.font='10px system-ui';ctx.textAlign='left';ctx.fillText('Travel',tip[0]+6,tip[1]-6);}
+  }
   // An honest scale bar adapts to cloud framing and user zoom.
   let scaleMeters=90/sc;const power=10**Math.floor(Math.log10(scaleMeters)),steps=[1,2,5,10];scaleMeters=steps.find(v=>v*power>=scaleMeters)*power;const bar=scaleMeters*sc;
   if(finite(bar)&&bar>0&&bar<w*.5){ctx.strokeStyle='#abbfd0';ctx.fillStyle='#abbfd0';ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(w-26-bar,h-46);ctx.lineTo(w-26,h-46);ctx.moveTo(w-26-bar,h-50);ctx.lineTo(w-26-bar,h-42);ctx.moveTo(w-26,h-50);ctx.lineTo(w-26,h-42);ctx.stroke();ctx.font='10px system-ui';ctx.textAlign='center';ctx.fillText(dist(scaleMeters),w-26-bar/2,h-54);}
@@ -88,7 +244,7 @@
  }
  function drawHistogram(){const [c,w,h]=resize($('histogram')),bins=frames[index].metrics?.histogram||[];c.clearRect(0,0,w,h);const left=30,right=8,top=8,bottom=24,ww=w-left-right,hh=h-top-bottom,max=Math.max(1,...bins),bw=ww/Math.max(1,bins.length);c.strokeStyle='#30465e';c.lineWidth=1;c.beginPath();c.moveTo(left,top);c.lineTo(left,h-bottom);c.lineTo(w-right,h-bottom);c.stroke();c.fillStyle='#71dcda';bins.forEach((n,i)=>{const bh=n/max*hh;c.fillRect(left+i*bw+.5,h-bottom-bh,Math.max(.5,bw-1),bh);});c.fillStyle='#a7b8ca';c.font='10px system-ui';c.textAlign='right';c.fillText(fmt(max,0),left-4,top+8);c.fillText('0',left-4,h-bottom+3);c.textAlign='center';c.fillText('0°',left,h-6);c.fillText('180°',left+ww/2,h-6);c.fillText('360°',w-right,h-6);}
  function drawHistory(){const [c,w,h]=resize($('history'));c.clearRect(0,0,w,h);const left=26,right=8,top=10,bottom=24,ww=w-left-right,hh=h-top-bottom,t0=frames[0].time_s,span=Math.max(1,frames.at(-1).time_s-t0),x=t=>left+(t-t0)/span*ww,y=v=>top+(1-Math.max(0,Math.min(1,v)))*hh;c.font='10px system-ui';for(const v of [0,.5,1]){c.strokeStyle='#293c53';c.beginPath();c.moveTo(left,y(v));c.lineTo(w-right,y(v));c.stroke();c.fillStyle='#a7b8ca';c.textAlign='right';c.fillText(String(v),left-5,y(v)+3);}const line=(getter,color)=>{c.strokeStyle=color;c.lineWidth=1.7;c.beginPath();let started=false;for(const f of frames){const value=getter(f);if(!finite(value)){started=false;continue;}if(started)c.lineTo(x(f.time_s),y(value));else c.moveTo(x(f.time_s),y(value));started=true;}c.stroke();};line(f=>f.metrics?.occupied_fraction,'#71dcda');line(f=>f.metrics?.resultants?.[0],'#ffc17b');c.strokeStyle='#d6e5f2';c.setLineDash([3,3]);c.beginPath();c.moveTo(x(frames[index].time_s),top);c.lineTo(x(frames[index].time_s),h-bottom);c.stroke();c.setLineDash([]);c.fillStyle='#a7b8ca';c.textAlign='left';c.fillText('0',left,h-5);c.textAlign='right';c.fillText(elapsed(span),w-right,h-5);}
- function setIndex(i){index=Math.max(0,Math.min(frames.length-1,Math.round(i)));$('time').value=index;const f=frames[index],m=f.metrics||{};$('time-label').textContent=elapsed(f.time_s);$('frame-label').textContent='Epoch '+(index+1)+' / '+frames.length+' · t = '+fmt(f.time_s,0)+' s';$('snapshot').textContent=(index+1)+' / '+frames.length;$('occupancy').textContent=fmt(m.occupied_fraction*100,1)+'%';$('max-gap').textContent=fmt(m.max_gap_deg,1)+'°';$('r1').textContent=fmt(m.resultants?.[0],3);$('q95').textContent=fmt(radToDeg(m.phase_q95_width_rad),1)+'°';$('sigma-r').textContent=dist(m.rtn_sigma_m?.[0]);$('sigma-t').textContent=dist(m.rtn_sigma_m?.[1]);$('sigma-n').textContent=dist(m.rtn_sigma_m?.[2]);$('status').textContent=m.mixed?'Phase mixing criterion met':m.coverage?'Coverage criterion met':'Partial phase coverage';$('status-light').style.background=m.mixed?'#94dfb0':m.coverage?'#71dcda':'#ffc17b';$('previous').disabled=index===0;$('next').disabled=index===frames.length-1;dirty=true;drawHistogram();drawHistory();}
+ function setIndex(i){index=Math.max(0,Math.min(frames.length-1,Math.round(i)));$('time').value=index;const f=frames[index],m=f.metrics||{};$('time-label').textContent=elapsed(f.time_s);$('frame-label').textContent='Epoch '+(index+1)+' / '+frames.length+' · t = '+fmt(f.time_s,0)+' s';$('snapshot').textContent=(index+1)+' / '+frames.length;$('occupancy').textContent=fmt(m.occupied_fraction*100,1)+'%';$('max-gap').textContent=fmt(m.max_gap_deg,1)+'°';$('r1').textContent=fmt(m.resultants?.[0],3);$('q95').textContent=fmt(radToDeg(m.phase_q95_width_rad),1)+'°';$('sigma-r').textContent=dist(m.rtn_sigma_m?.[0]);$('sigma-t').textContent=dist(m.rtn_sigma_m?.[1]);$('sigma-n').textContent=dist(m.rtn_sigma_m?.[2]);$('status').textContent=m.mixed?'Phase mixing criterion met':m.coverage?'Coverage criterion met':'Partial phase coverage';$('status-light').style.background=m.mixed?'#94dfb0':m.coverage?'#71dcda':'#ffc17b';$('previous').disabled=index===0;$('next').disabled=index===frames.length-1;updateSection();dirty=true;drawHistogram();drawHistory();}
  function stop(){playing=false;clearInterval(playTimer);playTimer=null;$('play').textContent='▶ Play';$('play').setAttribute('aria-label','Play saved epochs');}
  function play(){if(playing){stop();return;}if(index===frames.length-1)setIndex(0);if(frames.length<2)return;playing=true;$('play').textContent='Ⅱ Pause';$('play').setAttribute('aria-label','Pause saved epochs');playTimer=setInterval(()=>{if(index<frames.length-1)setIndex(index+1);if(index===frames.length-1)stop();},1000/Number($('rate').value));}
  $('play').addEventListener('click',play);$('previous').addEventListener('click',()=>{stop();setIndex(index-1);});$('next').addEventListener('click',()=>{stop();setIndex(index+1);});$('time').addEventListener('input',e=>{stop();setIndex(Number(e.target.value));});$('rate').addEventListener('change',()=>{if(playing){stop();play();}});
@@ -96,8 +252,8 @@
  $('reset').addEventListener('click',reset);$('view').addEventListener('change',reset);$('framing').addEventListener('change',()=>{zoom=1;pan=[0,0];dirty=true;});$('reference').addEventListener('change',()=>{dirty=true;});$('hidden-particles').addEventListener('change',()=>{dirty=true;});
  let drag=null;canvas.addEventListener('pointerdown',e=>{drag={x:e.clientX,y:e.clientY,pan:e.shiftKey||e.button===1};canvas.setPointerCapture(e.pointerId);canvas.classList.add('dragging');});canvas.addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(drag.pan){pan[0]+=dx;pan[1]+=dy;}else{yaw+=dx*.008;pitch+=dy*.008;}drag.x=e.clientX;drag.y=e.clientY;dirty=true;});const release=()=>{drag=null;canvas.classList.remove('dragging');};canvas.addEventListener('pointerup',release);canvas.addEventListener('pointercancel',release);canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.05,Math.min(2e6,zoom*Math.exp(-e.deltaY*.001)));dirty=true;},{passive:false});canvas.addEventListener('dblclick',reset);
  document.addEventListener('keydown',e=>{if(['INPUT','SELECT','BUTTON'].includes(e.target.tagName))return;if(e.code==='Space'){e.preventDefault();play();}else if(e.key==='ArrowRight'){stop();setIndex(index+1);}else if(e.key==='ArrowLeft'){stop();setIndex(index-1);}});
- const ro=new ResizeObserver(()=>{dirty=true;drawHistogram();drawHistory();});ro.observe(canvas);ro.observe($('histogram'));ro.observe($('history'));function animate(){if(dirty){drawScene();dirty=false;}requestAnimationFrame(animate);}setIndex(0);requestAnimationFrame(animate);
- window.distributionViewer={get index(){return index;},get playing(){return playing;},get zoom(){return zoom;},get pan(){return pan.slice();},get angles(){return [yaw,pitch];},setIndex,stop,ready:true};
+ const ro=new ResizeObserver(()=>{dirty=true;drawHistogram();drawHistory();});ro.observe(canvas);ro.observe($('histogram'));ro.observe($('history'));ro.observe($('section-scene'));function animate(){if(dirty){drawScene();drawSection();dirty=false;}requestAnimationFrame(animate);}setIndex(0);requestAnimationFrame(animate);
+ window.distributionViewer={get index(){return index;},get playing(){return playing;},get zoom(){return zoom;},get pan(){return pan.slice();},get angles(){return [yaw,pitch];},get section(){return {...section,points:section.points.map(p=>({...p}))};},setIndex,stop,ready:true};
 })();
 </script>
 </body>

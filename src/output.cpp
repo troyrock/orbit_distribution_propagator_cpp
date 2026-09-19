@@ -170,6 +170,9 @@ void json(std::ostream &out, const Simulation &s) {
         first = false;
         out << "{\"time_s\":" << f.time_s << ",\"positions_m\":";
         nested_array(out, f.positions);
+        // This slot follows output_type (mean or osculating), as do the points.
+        out << ",\"reference_elements\":";
+        array(out, f.reference.osculating);
         out << ",\"reference_orbit_m\":";
         nested_array(out, f.reference_orbit);
         out << ",\"metrics\":{\"phase_sigma_rad\":" << f.phase.sigma
