@@ -27,5 +27,9 @@ void validate_config(const Config &config);
 std::vector<double> output_times(const Config &config);
 long double estimated_memory_bytes(const Config &config, std::size_t sample_count);
 std::vector<Elements> sample_initial(const Config &config);
+// Domain census only: returns bound ellipses even when their perigee is below
+// the configured geometric floor. Never use without a subsequent domain check.
+// The ordinary sampler above retains its strict rejection contract.
+std::vector<Elements> sample_initial_for_domain_audit(const Config &config);
 std::string config_template();
 } // namespace distribution

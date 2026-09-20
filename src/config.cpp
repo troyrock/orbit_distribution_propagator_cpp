@@ -302,7 +302,8 @@ long double estimated_memory_bytes(const Config &c, std::size_t n) {
                4 +
            (static_cast<long double>(std::min(n, workers)) * 2 + 8) * 1024 * 1024;
 }
-std::vector<Elements> sample_initial(const Config &c) {
+static std::vector<Elements> sample_initial_impl(const Config &c, bool enforce_perigee) {
+    const double floor = enforce_perigee ? c.backend.earth_radius_m + c.minimum_altitude_m : 0.0;
     std::vector<Elements> out;
     if (!c.empirical_samples_csv.empty()) {
         std::ifstream in(c.empirical_samples_csv);
@@ -324,7 +325,7 @@ std::vector<Elements> sample_initial(const Config &c) {
                     v = apply_offset(c, v);
                 if (estimated_memory_bytes(c, out.size() + 1) > c.max_memory_mb * 1024 * 1024)
                     throw std::invalid_argument("Empirical ensemble exceeds max_memory_mb");
-                validate_elements(v, c.backend.mu, c.backend.earth_radius_m + c.minimum_altitude_m);
+                validate_elements(v, c.backend.mu, floor);
                 out.push_back(v);
             } catch (const std::exception &e) {
                 throw std::runtime_error("Invalid empirical row " + std::to_string(row) + ": " +
@@ -349,7 +350,7 @@ std::vector<Elements> sample_initial(const Config &c) {
                     offset[i] += lower[i][j] * z[j];
             try {
                 auto e = apply_offset(c, offset);
-                validate_elements(e, c.backend.mu, c.backend.earth_radius_m + c.minimum_altitude_m);
+                validate_elements(e, c.backend.mu, floor);
                 out.push_back(e);
             } catch (const std::exception &e) {
                 throw std::runtime_error(
@@ -359,6 +360,10 @@ std::vector<Elements> sample_initial(const Config &c) {
         }
     }
     return out;
+}
+std::vector<Elements> sample_initial(const Config &c) { return sample_initial_impl(c, true); }
+std::vector<Elements> sample_initial_for_domain_audit(const Config &c) {
+    return sample_initial_impl(c, false);
 }
 std::string config_template() {
     return R"(# SI units except degrees explicitly named and time in days.

@@ -195,6 +195,28 @@ struct Backend::Impl {
         return result;
     }
 
+    MeanPhaseLaw mean_phase_law() {
+        // Scope is deliberately tied to the force construction above: constant
+        // C20 only (degree 2, order 0), a fixed equatorial symmetry axis, and
+        // the optional native Zeis closed-form J2-squared model. Additional
+        // zonals, tesseral, third-body, drag, or time-dependent forces require
+        // a new proof and must not silently use this flow.
+        if (config.force_model != "kepler" && config.force_model != "j2" &&
+            config.force_model != "j2_j2sq")
+            throw std::logic_error("mean-phase law is unsupported for this force model");
+
+        // In these mean equations, da/dt = 0 and the eccentricity (ex,ey)
+        // and inclination (hx,hy) pairs undergo rotations: dot(z) = w*J*z.
+        // Consequently a, ex^2+ey^2, and hx^2+hy^2 are constant. Both the
+        // degree-2 zonal averaged potential and Zeis lambda derivative depend
+        // only on these invariants. Thus d(lambda)/dt is constant, including
+        // the native J2 and J2-squared contributions, and lambda(t) below is
+        // the exact solution of this mean-phase ODE up to floating-point
+        // evaluation. No division by eccentricity or inclination is needed.
+        const auto derivative = rates(current, elapsed);
+        return MeanPhaseLaw{current, elapsed, derivative[5]};
+    }
+
     BackendState advance(double target) {
         if (!std::isfinite(target) || target < elapsed)
             throw std::invalid_argument("output times must be finite and nondecreasing");
@@ -300,6 +322,19 @@ Backend::Backend(Backend &&) noexcept = default;
 Backend &Backend::operator=(Backend &&) noexcept = default;
 BackendState Backend::advance(double elapsed_seconds) {
     return impl_->advance(elapsed_seconds);
+}
+MeanPhaseLaw Backend::mean_phase_law() {
+    return impl_->mean_phase_law();
+}
+
+double MeanPhaseLaw::longitude(double elapsed_seconds) const {
+    if (!std::isfinite(elapsed_seconds) || elapsed_seconds < epoch_s)
+        throw std::invalid_argument("phase-law times must be finite and at or after its epoch");
+    const double value = std::fma(longitude_rate_rad_s, elapsed_seconds - epoch_s,
+                                  mean_at_epoch[5]);
+    if (!std::isfinite(value))
+        throw std::overflow_error("phase-law longitude is not finite");
+    return value;
 }
 const BackendStats &Backend::stats() const noexcept {
     return impl_->statistics;
