@@ -279,3 +279,36 @@ node tools/test_viewer.cjs outputs/meo-ball/visualization.html --screenshot-dir 
 
 See [DESCRIPTION.md](DESCRIPTION.md) for extension points and
 [docs/SCIENCE.md](docs/SCIENCE.md) for derivations and primary-source references.
+
+## Coverage surface with orbital sliders
+
+The additional `distribution_coverage` executable efficiently measures orbital
+coverage for large parameter studies. The offline HTML report plots coverage
+time against position and velocity uncertainty, with continuous sliders for
+**perigee altitude**, inclination, and eccentricity. Values at simulated orbital
+nodes are measured; intermediate slider positions are explicitly labeled as
+interpolations of log time. Unsupported or Earth-intersecting cases leave gaps.
+
+```powershell
+cmake --build build --config Release
+python tools/coverage_grid.py --exe build/distribution_coverage.exe `
+  --config examples/coverage_grid.cfg --output outputs/coverage-orbits `
+  --jobs 3 --threads 8
+python tools/render_coverage_explorer.py outputs/coverage-orbits/study.json `
+  --output outputs/coverage-orbits/explorer.html --plotly-js PATH/plotly.min.js
+```
+
+On multi-configuration generators, use `build/Release/distribution_coverage.exe`.
+The driver and renderer use Python's standard library; all particle calculations
+run in C++. Supply a local Plotly JavaScript bundle (for example from an installed
+Plotly package). It is embedded in the HTML, which works without network access.
+The default study contains 27 orbital settings, each with an 11-by-11 uncertainty
+surface and 20,000 particles per case. Repeating the driver command resumes
+completed cases only when the executable, configuration, and axes match its
+saved manifest. `--help` describes grid and concurrency options.
+
+The fast phase flow is exact for this program's fixed degree-2 J2 plus J2-squared
+mean equations after native initialization. It is restricted to those equations;
+it does not add atmospheric or other omitted forces. See
+[the coverage study guide](docs/COVERAGE_EXPLORER.md) for the coverage criterion,
+domain masks, reproducibility, interpolation checks, and algorithm proof.

@@ -466,6 +466,39 @@ Its true-angle matching and axes also differ from `tube_rtn_sigma_m`, which
 uses output mean longitude and RTN axes over the complete ensemble. Existing
 metrics, event detection, and saved-epoch playback semantics are unchanged.
 
+## Coverage parameter studies
+
+`MeanPhaseLaw` contains the initialized mean elements, epoch, and native constant
+mean-longitude derivative. Each coverage worker owns a `MeanPhaseFactory` that
+reuses native force objects and invariant Hansen tables, repeats the unchanged
+native mean conversion for every sample, and skips unused short-period output
+preparation. `coverage.cpp` stores relative initial phase and rate
+in particle-major arrays, then evaluates the exact affine phase flow of the
+currently supported fixed gravity models. `CoverageResult` records sampled onset
+and confirmation, cadence, evaluated epochs, native rate spread, runtime, and
+initial-perigee tail counts. Invalid whole ensembles have an explicit status and
+no invented event time. The ordinary simulator's stricter sampler is unchanged;
+the coverage audit uses a separate entry point that retains bound low-perigee
+draws long enough to count and classify them.
+
+The scanner keeps per-bin counts, minima, and maxima. For the default occupied
+72-bin/5-degree condition, only inter-bin gaps can exceed the threshold, giving
+an exact linear-time Boolean. It falls back to sorted phases when that proof
+does not apply and always sorts once for the reported onset gap. It scans epochs
+in order because the coverage criterion need not be monotonic. No frame-major
+Cartesian archive or short-period output reconstruction is required.
+
+`coverage_main.cpp` validates a six-column cases CSV before processing it and
+flushes one JSONL record per ensemble. The standard-library Python grid driver
+distributes native batches across processes, fingerprints the executable and
+configuration, resumes matching per-case checkpoints, and exports ordered
+JSON/CSV. The HTML renderer embeds validated data and a local Plotly bundle.
+The browser performs trilinear interpolation in log coverage time across orbital
+nodes while retaining the original uncertainty axes. Missing contributing nodes
+produce holes; intermediate slider positions never acquire a simulated status.
+Full formulas and data conventions are in
+[docs/COVERAGE_EXPLORER.md](docs/COVERAGE_EXPLORER.md).
+
 ## Tests and extension points
 
 Tests use throwing checks that remain active in Release builds. The suites cover:
