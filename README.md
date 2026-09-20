@@ -306,6 +306,8 @@ The default study contains 27 orbital settings, each with an 11-by-11 uncertaint
 surface and 20,000 particles per case. Repeating the driver command resumes
 completed cases only when the executable, configuration, and axes match its
 saved manifest. `--help` describes grid and concurrency options.
+An operating-system lock prevents concurrent drivers from writing the same
+study directory and is released automatically when the driver exits.
 
 The fast phase flow is exact for this program's fixed degree-2 J2 plus J2-squared
 mean equations after native initialization. It is restricted to those equations;

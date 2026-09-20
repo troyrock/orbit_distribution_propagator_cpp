@@ -2,11 +2,13 @@
 """Resumable parameter-grid orchestration; all physics executes in C++."""
 import argparse
 import concurrent.futures
+from contextlib import contextmanager
 import csv
 import hashlib
 import itertools
 import json
 import math
+import os
 from pathlib import Path
 import subprocess
 import time
@@ -16,6 +18,33 @@ FIELDS = ('run_id', 'perigee_altitude_km', 'inclination_deg', 'eccentricity',
           'position_sigma_km', 'velocity_sigma_m_s')
 AXES = ('perigee_altitudes_km', 'inclinations_deg', 'eccentricities',
         'position_sigmas_km', 'velocity_sigmas_m_s')
+
+
+@contextmanager
+def output_lock(directory):
+    """Prevent two writers; OS locks are released even after process failure."""
+    with (directory / '.coverage-grid.lock').open('a+b') as stream:
+        if stream.seek(0, 2) == 0:
+            stream.write(b'0')
+            stream.flush()
+        stream.seek(0)
+        if os.name == 'nt':
+            import msvcrt
+            acquire = lambda: msvcrt.locking(stream.fileno(), msvcrt.LK_NBLCK, 1)
+            release = lambda: msvcrt.locking(stream.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+            acquire = lambda: fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+            release = lambda: fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+        try:
+            acquire()
+        except OSError as error:
+            raise RuntimeError('Study directory is locked by another coverage-grid process') from error
+        try:
+            yield
+        finally:
+            stream.seek(0)
+            release()
 
 
 def numbers(text):
@@ -94,6 +123,11 @@ def main():
     args.exe = args.exe.resolve(strict=True)
     args.config = args.config.resolve(strict=True)
     args.output.mkdir(parents=True, exist_ok=True)
+    with output_lock(args.output):
+        return run_study(args, axes)
+
+
+def run_study(args, axes):
     raw = args.output / 'raw'
     raw.mkdir(exist_ok=True)
     config = {}
@@ -107,7 +141,7 @@ def main():
                        'coverage_occupied_fraction': '1', 'persistence': '3',
                        'force_model': 'j2_j2sq', 'initial_type': 'osculating'}.items():
         if config.get(key) != value:
-            parser.error(f'Explorer requires {key} = {value} explicitly in base config')
+            raise ValueError(f'Explorer requires {key} = {value} explicitly in base config')
     manifest = {
         'schema_version': 1, 'executable_sha256': digest(args.exe),
         'config_sha256': digest(args.config), 'config_text': args.config.read_text(encoding='utf-8'),

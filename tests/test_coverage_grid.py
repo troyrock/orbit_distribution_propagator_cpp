@@ -62,6 +62,10 @@ class GridTests(unittest.TestCase):
             self.assertIsNone(study['runs'][0]['coverage_time_days'])
             raw = list((output / 'raw').glob('*.jsonl'))
             before = raw[0].read_bytes()
+            with grid.output_lock(output):
+                competing = subprocess.run(command, capture_output=True, text=True)
+                self.assertNotEqual(competing.returncode, 0)
+                self.assertIn('locked by another', competing.stderr)
             resumed = subprocess.run(command, capture_output=True, text=True)
             self.assertEqual(resumed.returncode, 0, resumed.stderr)
             self.assertIn('1 already complete', resumed.stdout)
