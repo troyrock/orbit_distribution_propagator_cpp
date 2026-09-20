@@ -91,10 +91,10 @@ CoverageResult run_coverage(Config config, const CoverageOptions &options) {
     std::exception_ptr exception; std::mutex mutex;
     auto worker=[&] {
         try {
+            MeanPhaseFactory factory(config.backend);
             while(!failed) {
                 const auto id=next.fetch_add(1); if(id>=initial.size()) break;
-                Backend backend(config.backend,initial[id]);
-                const auto model=backend.mean_phase_law();
+                const auto model=factory.prepare(initial[id]);
                 phase0[id]=model.mean_at_epoch[5]-reference.mean_at_epoch[5];
                 rate[id]=model.longitude_rate_rad_s-reference.longitude_rate_rad_s;
                 const auto &e=model.mean_at_epoch;

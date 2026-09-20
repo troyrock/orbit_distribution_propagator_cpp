@@ -99,7 +99,7 @@ struct Backend::Impl {
     double longitude_compensation = 0.0;
     bool have_first_rate = false;
 
-    Impl(const BackendConfig &input_config, const Elements &initial) : config(input_config) {
+    explicit Impl(const BackendConfig &input_config) : config(input_config) {
         require_positive(config.mu, "mu");
         require_positive(config.earth_radius_m, "Earth radius");
         require_positive(config.relative_tolerance, "relative tolerance");
@@ -119,7 +119,6 @@ struct Backend::Impl {
             throw std::invalid_argument("initial_type must be mean or osculating");
         if (config.output_type != "mean" && config.output_type != "osculating")
             throw std::invalid_argument("output_type must be mean or osculating");
-        validate_elements(initial);
         propagator.setMu(config.mu);
         if (config.force_model != "kepler") {
             dsst::forces::SphericalHarmonicsProviderData gravity;
@@ -143,6 +142,13 @@ struct Backend::Impl {
                 propagator.addForceModel(j2_squared);
             }
         }
+    }
+
+    Impl(const BackendConfig &input_config, const Elements &initial) : Impl(input_config) {
+        initialize(initial, true);
+    }
+
+    void initialize(const Elements &initial, bool prepare_output) {
         auto orbit = make_orbit(initial, 0.0, config.mu);
         // The native shell does not initialize short-period terms before its
         // first computeMeanState call. Explicit initialization is essential.
@@ -152,8 +158,14 @@ struct Backend::Impl {
         }
         current = elements(orbit);
         validate_elements(current);
-        propagator.beforeIntegration(make_orbit(current, 0.0, config.mu));
-        if (zonal) {
+        // The regular backend prepares exact-time short-period output as
+        // before. A phase-only factory needs no output geometry: rates()
+        // rebuilds every orbit-dependent mean-force context from current.
+        // The degree-2 Hansen table dimensions are state independent, and
+        // beforeIntegration above replaces all previous short-period slots.
+        if (prepare_output)
+            propagator.beforeIntegration(make_orbit(current, 0.0, config.mu));
+        if (zonal && !zonal_hansen) {
             zonal_hansen = std::make_unique<dsst::forces::DSSTZonal::HansenObjects>(
                 zonal->createHansenObjects());
         }
@@ -324,6 +336,16 @@ BackendState Backend::advance(double elapsed_seconds) {
     return impl_->advance(elapsed_seconds);
 }
 MeanPhaseLaw Backend::mean_phase_law() {
+    return impl_->mean_phase_law();
+}
+
+MeanPhaseFactory::MeanPhaseFactory(const BackendConfig &config)
+    : impl_(std::make_unique<Backend::Impl>(config)) {}
+MeanPhaseFactory::~MeanPhaseFactory() = default;
+MeanPhaseFactory::MeanPhaseFactory(MeanPhaseFactory &&) noexcept = default;
+MeanPhaseFactory &MeanPhaseFactory::operator=(MeanPhaseFactory &&) noexcept = default;
+MeanPhaseLaw MeanPhaseFactory::prepare(const Elements &initial) {
+    impl_->initialize(initial, false);
     return impl_->mean_phase_law();
 }
 

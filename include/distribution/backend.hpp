@@ -74,8 +74,29 @@ class Backend {
     double time() const noexcept;
 
   private:
+    friend class MeanPhaseFactory;
     struct Impl;
     std::unique_ptr<Impl> impl_;
+};
+
+// Reusable preparation of independent epoch-zero mean-phase laws. Own one per
+// worker: native force objects, invariant Hansen tables, and scratch storage
+// are retained, while native osculating-to-mean conversion is repeated in full
+// for every input. The factory does not propagate or produce output geometry.
+// Do not call one instance concurrently.
+class MeanPhaseFactory {
+  public:
+    explicit MeanPhaseFactory(const BackendConfig &config);
+    ~MeanPhaseFactory();
+    MeanPhaseFactory(MeanPhaseFactory &&) noexcept;
+    MeanPhaseFactory &operator=(MeanPhaseFactory &&) noexcept;
+    MeanPhaseFactory(const MeanPhaseFactory &) = delete;
+    MeanPhaseFactory &operator=(const MeanPhaseFactory &) = delete;
+
+    MeanPhaseLaw prepare(const Elements &initial);
+
+  private:
+    std::unique_ptr<Backend::Impl> impl_;
 };
 
 } // namespace distribution

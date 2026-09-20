@@ -6,7 +6,9 @@
 #include <dsst/forces/DSSTZonal.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <future>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -253,10 +255,120 @@ void api_contract_checks() {
     }
     require(caught, "query before rebased phase-law epoch accepted");
 }
+
+void same_law(const distribution::MeanPhaseLaw &actual,
+              const distribution::MeanPhaseLaw &expected) {
+    require(actual.mean_at_epoch == expected.mean_at_epoch,
+            "reusable factory changed native mean conversion");
+    require(actual.epoch_s == expected.epoch_s,
+            "reusable factory changed initial epoch");
+    require(actual.longitude_rate_rad_s == expected.longitude_rate_rad_s,
+            "reusable factory changed native phase coefficient");
+    require(actual.longitude(2000.0 * day) == expected.longitude(2000.0 * day),
+            "reusable factory changed long-horizon phase");
+}
+
+void factory_checks() {
+    std::vector<Elements> states;
+    for (double inclination : {0.0, 45.0, 90.0, 170.0})
+        for (double eccentricity : {0.0, 0.05, 0.1, 0.5})
+            for (double altitude : {1000.0, 3000.0}) {
+                const auto state = sample(altitude, inclination, eccentricity);
+                states.push_back(rotated(state, 0.41 * states.size(),
+                                         -0.17 * states.size(), 0.31 * states.size()));
+            }
+    for (const std::string force : {"kepler", "j2", "j2_j2sq"}) {
+        for (const std::string type : {"mean", "osculating"}) {
+            BackendConfig config;
+            config.force_model = force;
+            config.initial_type = type;
+            config.output_type = "mean";
+            std::vector<distribution::MeanPhaseLaw> expected;
+            for (const auto &state : states) {
+                Backend backend(config, state);
+                expected.push_back(backend.mean_phase_law());
+            }
+            distribution::MeanPhaseFactory factory(config);
+            for (std::size_t i = 0; i < states.size(); ++i)
+                same_law(factory.prepare(states[i]), expected[i]);
+            // Reverse order and repeated inputs detect retained orbit-dependent
+            // coefficients or short-period slots from a previous particle.
+            for (std::size_t i = states.size(); i-- > 0;) {
+                same_law(factory.prepare(states[i]), expected[i]);
+                same_law(factory.prepare(states[i]), expected[i]);
+            }
+            auto invalid = states.front();
+            invalid[1] = 1.0;
+            bool caught = false;
+            try {
+                static_cast<void>(factory.prepare(invalid));
+            } catch (const std::invalid_argument &) {
+                caught = true;
+            }
+            require(caught, "reusable factory accepted invalid input");
+            same_law(factory.prepare(states.back()), expected.back());
+
+            // Workers own independent native storage. Inputs and reductions
+            // stay fixed while construction and reuse overlap between workers.
+            std::vector<std::future<void>> workers;
+            for (std::size_t worker = 0; worker < 3; ++worker)
+                workers.push_back(std::async(std::launch::async, [&, worker] {
+                    distribution::MeanPhaseFactory local(config);
+                    for (std::size_t i = worker; i < states.size(); i += 3)
+                        same_law(local.prepare(states[i]), expected[i]);
+                }));
+            for (auto &worker : workers)
+                worker.get();
+        }
+    }
+}
+
+// Optional reproducible timing, separate from pass/fail tests. Comparison is
+// exact for every coefficient; no timing threshold depends on machine load.
+void factory_benchmark(std::size_t count) {
+    require(count > 0, "benchmark sample count must be positive");
+    std::vector<Elements> states;
+    for (std::size_t i = 0; i < count; ++i) {
+        const auto state = sample(1000.0 + (i % 201) * 10.0,
+                                  (i % 181) * 0.5, (i % 101) * 0.001);
+        states.push_back(rotated(state, 0.071 * (i % 179),
+                                 -0.047 * (i % 97), 0.037 * (i % 251)));
+    }
+    BackendConfig config;
+    config.output_type = "mean";
+    for (const std::string type : {"mean", "osculating"}) {
+        config.initial_type = type;
+        for (int round = 0; round < 3; ++round) {
+            std::vector<distribution::MeanPhaseLaw> expected;
+            expected.reserve(count);
+            const auto start = std::chrono::steady_clock::now();
+            for (const auto &state : states) {
+                Backend backend(config, state);
+                expected.push_back(backend.mean_phase_law());
+            }
+            const auto middle = std::chrono::steady_clock::now();
+            distribution::MeanPhaseFactory factory(config);
+            for (std::size_t i = 0; i < count; ++i)
+                same_law(factory.prepare(states[i]), expected[i]);
+            const auto end = std::chrono::steady_clock::now();
+            const double fresh = std::chrono::duration<double>(middle - start).count();
+            const double reused = std::chrono::duration<double>(end - middle).count();
+            std::cout << "Phase factory benchmark: samples=" << count
+                      << " input=" << type << " round=" << round + 1
+                      << " fresh_s=" << fresh << " factory_s=" << reused
+                      << " speedup=" << fresh / reused << " exact=true\n" << std::flush;
+        }
+    }
+}
 } // namespace
 
-int main() {
+int main(int argc, char **argv) {
     try {
+        if (argc >= 2 && std::string(argv[1]) == "--benchmark-phase-factory") {
+            factory_benchmark(argc >= 3 ? std::stoull(argv[2]) : 20000);
+            return 0;
+        }
+        factory_checks();
         api_contract_checks();
         native_invariant_and_rotation_checks();
         adaptive_long_horizon_checks();
