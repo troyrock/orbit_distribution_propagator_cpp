@@ -299,8 +299,8 @@ python tools/render_coverage_explorer.py outputs/coverage-orbits/study.json `
 ```
 
 On multi-configuration generators, use `build/Release/distribution_coverage.exe`.
-The driver and renderer use Python's standard library; all particle calculations
-run in C++. Supply a local Plotly JavaScript bundle (for example from an installed
+The driver and renderer use Python 3.10 or newer and its standard library; all
+particle calculations run in C++. Supply a local Plotly JavaScript bundle (for example from an installed
 Plotly package). It is embedded in the HTML, which works without network access.
 The default study contains 27 orbital settings, each with an 11-by-11 uncertainty
 surface and 20,000 particles per case. Repeating the driver command resumes

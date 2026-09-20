@@ -206,20 +206,36 @@ some interior orbits might be valid even when interpolation cannot be supported
 by all surrounding nodes. Refinement near those boundaries can narrow that
 unavailable region.
 
-**Midpoint validation is pending until the generated study records its
-results.** Withheld orbit midpoints should be directly simulated, compared with
-the surrounding log-time interpolation, and included in the study metadata.
-The intended refinement threshold is approximately 5% relative time error,
-with observation cadence and finite-ensemble threshold jumps reported rather
-than hidden. Physical phase-shear trends are smooth, but the last-gap and
-persistence criteria can have small irregularities even with common draws;
-denser nodes alone do not eliminate that sampling variability.
+The September 19, 2026 study completed all 3267 cases using 20,000 particles per
+case and seed 20260919. There were 3234 valid coverage events and 33 masked
+Earth-intersecting ensembles. Valid sampled onset times ranged from 0.252419 to
+52.746561 days. The widest onset bracket was 0.981% of its reported time. These
+are results for the stated force model and finite-sample criterion.
+
+An additional 72 directly simulated holdouts used altitudes 1500/2500 km,
+inclinations 22.5/67.5 degrees, eccentricities 0.025/0.075, position sigmas
+1/10/100 km, and velocity sigmas 0.01/0.1/1 m/s. All 66 supported comparisons
+passed the 5% refinement criterion: maximum relative interpolation error 4.882%,
+95th percentile 3.505%, and RMS 1.500%. Six comparisons required a masked
+supporting corner and were left unavailable. This validates the tested
+midpoints, not every continuous slider setting or statistical confidence in a
+single-seed coverage time. Physical phase-shear trends are smooth, but the
+last-gap and persistence criteria can have small irregularities even with
+common draws; denser nodes alone do not eliminate that sampling variability.
+
+The main run took 2811 seconds (46.9 minutes) on the development machine with
+three concurrent native processes and eight workers per process. This measured
+runtime is machine-dependent. The checked executable had SHA-256
+`1fac5cd3856605ddc43c448cefd4d119c4925d10afe2f90039cb627799a7e361`.
+All 19 configured CTest groups passed, including native/Java fixture checks,
+phase-flow equivalence, coverage-oracle tests, and executable/runner workflows.
 
 The independent standard-library validator checks the complete Cartesian case
 count, each 20,000-particle record and seed, event arithmetic, and interpolation
 against those withheld cases:
 
 ```powershell
+python tools/coverage_grid.py --exe build/distribution_coverage.exe --config examples/coverage_grid.cfg --output outputs/coverage_orbit_explorer/holdouts --altitudes 1500,2500 --inclinations 22.5,67.5 --eccentricities 0.025,0.075 --positions 1,10,100 --velocities 0.01,0.1,1
 python tools/validate_coverage_grid.py --study outputs/coverage_orbit_explorer/study.json --holdouts outputs/coverage_orbit_explorer/holdouts/study.json --output outputs/coverage_orbit_explorer/validation.json
 ```
 
