@@ -55,6 +55,28 @@ def fixture():
     return {"metadata": metadata, "runs": runs}
 
 
+def reference_fixture():
+    """Extended altitude grid with a separately preserved measured surface."""
+    data = fixture()
+    data["metadata"]["perigee_altitudes_km"][-1] = 30000
+    data["metadata"]["altitude_interpolation"] = "log_geocentric_perigee_radius"
+    data["metadata"]["earth_radius_km"] = 6378.137
+    for run in data["runs"]:
+        if run["perigee_altitude_km"] == 3000:
+            run["perigee_altitude_km"] = 30000
+    reference = {
+        "label": "Original MEO / PDF", "description": "Preserved original measured times.",
+        "metadata": copy.deepcopy(data["metadata"]), "runs": [],
+    }
+    reference["metadata"].update(perigee_altitudes_km=[19650.663], inclinations_deg=[55], eccentricities=[0.02])
+    for run in data["runs"][:9]:
+        reference_run = copy.deepcopy(run)
+        reference_run.update(perigee_altitude_km=19650.663, inclination_deg=55, eccentricity=0.02)
+        reference["runs"].append(reference_run)
+    data["reference_surface"] = reference
+    return data
+
+
 class CoverageRendererTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix="coverage-renderer-")
@@ -145,6 +167,57 @@ class CoverageRendererTests(unittest.TestCase):
                             report, re.DOTALL).group(1)
         self.assertEqual(json.loads(payload), self.data)
         self.assertIn(self.library.read_text(encoding="utf-8"), report)
+
+    def test_altitude_interpolation_policy_is_explicit_and_validated(self):
+        self.data["metadata"]["earth_radius_km"] = 6378.137
+        for policy in ("linear_altitude", "log_geocentric_perigee_radius"):
+            with self.subTest(policy=policy):
+                self.data["metadata"]["altitude_interpolation"] = policy
+                renderer.validate_data(self.data)
+        self.data["metadata"]["altitude_interpolation"] = "unsupported"
+        with self.assertRaisesRegex(ValueError, "altitude_interpolation"):
+            renderer.validate_data(self.data)
+        self.data["metadata"].update(altitude_interpolation="log_geocentric_perigee_radius",
+                                     perigee_altitudes_km=[-7000, 3000])
+        with self.assertRaisesRegex(ValueError, "positive geocentric"):
+            renderer.validate_data(self.data)
+        del self.data["metadata"]["earth_radius_km"]
+        with self.assertRaisesRegex(ValueError, "explicit metadata.earth_radius_km"):
+            renderer.validate_data(self.data)
+
+    def test_reference_surface_preserves_the_measured_dataset(self):
+        data = reference_fixture()
+        data["metadata"]["initial_view"] = "reference"
+        renderer.validate_data(data)
+        report = renderer.render(data, self.library)
+        payload = re.search(r'<script id="coverage-data" type="application/json">(.*?)</script>',
+                            report, re.DOTALL).group(1)
+        self.assertEqual(json.loads(payload)["reference_surface"], data["reference_surface"])
+
+    def test_initial_view_requires_an_available_reference(self):
+        self.data["metadata"]["initial_view"] = "reference"
+        with self.assertRaisesRegex(ValueError, "requires a reference_surface"):
+            renderer.validate_data(self.data)
+        self.data["metadata"]["initial_view"] = "unknown"
+        with self.assertRaisesRegex(ValueError, "initial_view"):
+            renderer.validate_data(self.data)
+
+    def test_reference_surface_rejects_incompatible_or_ambiguous_metadata(self):
+        mutations = (
+            lambda r: r.update(label=""),
+            lambda r: r.update(description=123),
+            lambda r: r.update(reference_surface={}),
+            lambda r: r["metadata"].update(samples=19999),
+            lambda r: r["metadata"].update(earth_radius_km=6000),
+            lambda r: r["metadata"].update(perigee_altitudes_km=[40000]),
+            lambda r: r["metadata"].update(inclinations_deg=[55, 60]),
+            lambda r: r["metadata"].update(velocity_sigmas_m_s=[0.01, 0.1, 1, 2]),
+        )
+        for mutation in mutations:
+            data = reference_fixture()
+            mutation(data["reference_surface"])
+            with self.subTest(reference=data["reference_surface"]["metadata"]), self.assertRaises(ValueError):
+                renderer.validate_data(data)
 
     def test_template_and_bundle_errors_are_actionable(self):
         broken = self.root / "template.html"

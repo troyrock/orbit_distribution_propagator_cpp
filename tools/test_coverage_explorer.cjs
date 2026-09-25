@@ -17,11 +17,19 @@ const template=fs.readFileSync(path.join(__dirname,'../web/coverage_explorer.htm
 const names=['perigee_altitude_km','inclination_deg','eccentricity'];
 const axisNames=['perigee_altitudes_km','inclinations_deg','eccentricities'];
 const near=(actual,expected,message)=>assert(Math.abs(actual-expected)<=1e-11*Math.max(1,Math.abs(expected)),message+': '+actual+' != '+expected);
-function syntheticData(){
- const metadata={samples:20000,seed:20260919,perigee_altitudes_km:[1000,2000,3000],inclinations_deg:[0,45,90],eccentricities:[0,.05,.1],position_sigmas_km:[1,10,100],velocity_sigmas_m_s:[.01,.1,1],coverage_definition:'Synthetic test criterion, not simulation results.',model_scope:'Synthetic browser test values only.',synthetic_test_data:true};
+function syntheticData(extended=false){
+ const metadata={samples:20000,seed:20260919,perigee_altitudes_km:extended?[1000,2000,3000,7000,12500,20000,30000]:[1000,2000,3000],inclinations_deg:[0,45,90],eccentricities:[0,.05,.1],position_sigmas_km:[1,10,100],velocity_sigmas_m_s:[.01,.1,1],coverage_definition:'Synthetic test criterion, not simulation results.',model_scope:'Synthetic browser test values only.',synthetic_test_data:true};
+ if(extended){metadata.altitude_interpolation='log_geocentric_perigee_radius';metadata.earth_radius_km=6378.137;}
  const runs=[];
  for(const a of metadata.perigee_altitudes_km)for(const i of metadata.inclinations_deg)for(const e of metadata.eccentricities)for(const p of metadata.position_sigmas_km)for(const v of metadata.velocity_sigmas_m_s){const t=Math.exp(a/5000+i/180+e*2)*70/Math.hypot(p,v*3);runs.push({run_id:String(runs.length),samples:20000,perigee_altitude_km:a,inclination_deg:i,eccentricity:e,position_sigma_km:p,velocity_sigma_m_s:v,status:'ok',coverage_time_days:t,coverage_lower_days:.99*t,coverage_upper_days:t,min_initial_perigee_km:a-8*p,particles_below_300km:a-8*p<300?5:0,particles_below_500km:a-8*p<500?15:0});}
- return {metadata,runs};
+ const data={metadata,runs};
+ if(extended){
+  const referenceMeta={...metadata,perigee_altitudes_km:[19650.663],inclinations_deg:[55],eccentricities:[.02]};
+  const referenceRuns=runs.slice(0,9).map(r=>({...r,run_id:'reference_'+r.run_id,perigee_altitude_km:19650.663,inclination_deg:55,eccentricity:.02,coverage_time_days:643.539/Math.hypot(r.position_sigma_km,r.velocity_sigma_m_s),coverage_lower_days:637.992/Math.hypot(r.position_sigma_km,r.velocity_sigma_m_s),coverage_upper_days:643.539/Math.hypot(r.position_sigma_km,r.velocity_sigma_m_s)}));
+  data.reference_surface={label:'Original MEO / PDF',description:'Synthetic reference values preserved exactly.',metadata:referenceMeta,runs:referenceRuns};
+  metadata.initial_view='reference';
+ }
+ return data;
 }
 function embeddedData(html){const match=html.match(/<script id="coverage-data" type="application\/json">([\s\S]*?)<\/script>/);assert(match,'Report must embed the result grid.');return JSON.parse(match[1]);}
 function localLibrary(explicit,report){
@@ -45,6 +53,16 @@ function assertMeasured(g,data){
   if(!r||r.status!=='ok'){assert.equal(c.time,null);assert(c.reasons.includes(r?.status||'missing'));}
   else{assert.equal(c.status,'measured');assert.equal(c.time,r.coverage_time_days);assert.equal(c.lower,r.coverage_lower_days??null);assert.equal(c.upper,r.coverage_upper_days??null);}
  }
+}
+function assertReference(g,data){
+ assert.equal(g.mode,'reference');assert.equal(g.corners.length,0);
+ const reference=data.reference_surface;
+ for(const [j,name] of names.entries())assert.equal(g.values[name],reference.metadata[axisNames[j]][0]);
+ for(const row of g.cells)for(const c of row)assert.equal(c.status,'reference');
+ assertMeasured({...g,mode:'measured',cells:g.cells.map(row=>row.map(c=>({...c,status:'measured'})))},reference);
+}
+function firstCellMidpoint(meta){
+ return Object.fromEntries(names.map((name,j)=>{const axis=meta[axisNames[j]],radius=meta.earth_radius_km??6378.137;return [name,j===0&&meta.altitude_interpolation==='log_geocentric_perigee_radius'?Math.sqrt((radius+axis[0])*(radius+axis[1]))-radius:(axis[0]+axis[1])/2];}));
 }
 function assertMidpoint(g,data){
  const meta=data.metadata,table=lookup(data),axes=axisNames.map(n=>meta[n]);
@@ -84,13 +102,36 @@ async function checkReport(browser,file,data,shots,prefix){
  const {page,errors,network}=await openReport(browser,file);
  try{
   const axes=axisNames.map(n=>data.metadata[n]);
-  let g=await page.evaluate(()=>coverageExplorer.lastGrid);assertMeasured(g,data);
+  let g=await page.evaluate(()=>coverageExplorer.lastGrid);
+  if(data.metadata.initial_view==='reference')assertReference(g,data);else assertMeasured(g,data);
+  assert.equal(Number(await page.locator('#altitude').getAttribute('max')),axes[0].at(-1));
+  // A fitted scale must follow the selected surface; a shared scale includes
+  // all grid and reference cases without changing any measured values.
+  const plottedMax=()=>page.evaluate(()=>document.getElementById('surface')._fullLayout.scene.zaxis.range[1]);
+  near(await plottedMax(),g.max*1.04,'Initial fitted height scale');
+  await page.locator('#shared-scale').check();await waitRender(page);
+  const allRuns=[...data.runs,...(data.reference_surface?.runs??[])];
+  const maximum=Math.max(1,...allRuns.filter(r=>r.status==='ok').map(r=>r.coverage_time_days));
+  near(await plottedMax(),maximum*1.04,'Shared height scale');
+  near(await page.evaluate(()=>document.getElementById('surface').data[0].cmax),maximum,'Shared color scale');
+  await page.locator('#shared-scale').uncheck();await waitRender(page);
+  if(data.reference_surface){
+   await page.locator('#snap').check();await waitRender(page);
+   await page.click('#reference-orbit');await waitRender(page);g=await page.evaluate(()=>coverageExplorer.lastGrid);assertReference(g,data);
+   assert((await page.locator('#plot-state').textContent()).includes('no interpolation'));
+   const [referenceDownload]=await Promise.all([page.waitForEvent('download'),page.click('#download')]);assert.equal(referenceDownload.suggestedFilename(),'coverage_surface_reference.csv');
+   const csv=fs.readFileSync(await referenceDownload.path(),'utf8');assert(csv.includes(',reference,'));assert(csv.includes(String(data.reference_surface.runs[0].coverage_time_days)));
+   if(shots)await page.screenshot({path:path.join(shots,prefix+'-reference.png'),fullPage:true});
+   await page.locator('#altitude').fill(String(axes[0].at(-1)));await waitRender(page);assertMeasured(await page.evaluate(()=>coverageExplorer.lastGrid),data);
+   await page.locator('#snap').uncheck();await waitRender(page);
+  }else assert.equal(await page.locator('#reference-orbit').isVisible(),false);
+  await page.click('#reset-orbit');await waitRender(page);
   // Exercise the actual input controls, including both ends of every range.
   for(const [j,id] of ['altitude','inclination','eccentricity'].entries())for(const value of [axes[j][0],axes[j].at(-1)]){
    await page.locator('#'+id).fill(String(value));await waitRender(page);g=await page.evaluate(()=>coverageExplorer.lastGrid);near(g.values[names[j]],value,'Slider value');assertMeasured(g,data);
   }
   if(axes.every(a=>a.length>1)){
-   const midpoint=Object.fromEntries(names.map((n,j)=>[n,(axes[j][0]+axes[j][1])/2]));await page.evaluate(p=>coverageExplorer.setParameters(p),midpoint);g=await page.evaluate(()=>coverageExplorer.lastGrid);assertMidpoint(g,data);
+   const midpoint=firstCellMidpoint(data.metadata);await page.evaluate(p=>coverageExplorer.setParameters(p),midpoint);g=await page.evaluate(()=>coverageExplorer.lastGrid);assertMidpoint(g,data);
    assert((await page.locator('#node-note').textContent()).includes('No new simulation'));
    // User camera changes must survive parameter updates (uirevision contract).
    const chosen={eye:{x:1.9,y:1.2,z:1.5},center:{x:0,y:0,z:0},up:{x:0,y:0,z:1}};
@@ -101,7 +142,7 @@ async function checkReport(browser,file,data,shots,prefix){
    await page.click('#reset-camera');assert.notDeepEqual(await page.evaluate(()=>document.getElementById('surface')._fullLayout.scene.camera.eye),chosen.eye);
    await page.locator('#snap').check();await waitRender(page);g=await page.evaluate(()=>coverageExplorer.lastGrid);assertMeasured(g,data);await page.locator('#snap').uncheck();await waitRender(page);
   }
-  await page.click('#reset-orbit');await waitRender(page);g=await page.evaluate(()=>coverageExplorer.lastGrid);assertMeasured(g,data);
+  await page.click('#reset-orbit');await waitRender(page);g=await page.evaluate(()=>coverageExplorer.lastGrid);assertMeasured(g,data);near(await plottedMax(),g.max*1.04,'Updated fitted height scale');
   const [download]=await Promise.all([page.waitForEvent('download'),page.click('#download')]);assert.equal(download.suggestedFilename(),'coverage_surface_measured.csv');
   await assertResponsive(page,shots,prefix);
   assert.deepEqual(errors,[],'No browser errors.');assert.deepEqual(network,[],'No network requests from the offline report.');
@@ -130,11 +171,12 @@ async function main(){
   const candidates=[process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE,chromium.executablePath(),'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe','C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe'].filter(Boolean),executablePath=candidates.find(p=>fs.existsSync(p));
   browser=await chromium.launch({headless:true,...(executablePath?{executablePath}:{})});
   const clean=syntheticData(),cleanFile=writeFixture(directory,'synthetic',clean,library);await checkReport(browser,cleanFile,clean,shots,'synthetic');
+  const extended=syntheticData(true);await checkReport(browser,writeFixture(directory,'synthetic-extended',extended,library),extended,shots,'synthetic-extended');
   const holes=syntheticData(),statuses=['earth_intersection','mean_earth_intersection','no_phase_shear','unobserved'];
   for(let j=0;j<statuses.length;j++)Object.assign(holes.runs[j],{status:statuses[j],coverage_time_days:null,coverage_lower_days:null,coverage_upper_days:null});holes.runs.splice(4,1);
   await checkHoles(browser,writeFixture(directory,'synthetic-holes',holes,library),holes);
   if(report)await checkReport(browser,report,embeddedData(fs.readFileSync(report,'utf8')),shots,'actual');
-  console.log('PASS: renderer UI; all sliders; measured values; independent midpoint log interpolation; all invalid/missing corner masks; camera preservation/reset; rapid updates; CSV download; desktop/tablet/mobile; offline operation'+(report?'; actual report':'')+'.');
+  console.log('PASS: renderer UI; all sliders through 30000 km; measured values; independent linear/log-radius midpoint interpolation; original reference surface and CSV; fitted/shared height and color scales; all invalid/missing corner masks; camera preservation/reset; rapid updates; CSV download; desktop/tablet/mobile; offline operation'+(report?'; actual report':'')+'.');
   if(shots)console.log('Screenshots: '+shots);
  }finally{if(browser)await browser.close();const target=fs.realpathSync(directory),temporaryRoot=fs.realpathSync(os.tmpdir());assert.equal(path.dirname(target),temporaryRoot,'Cleanup target must stay inside the temporary directory.');assert(path.basename(target).startsWith('coverage-explorer-tests-'));fs.rmSync(target,{recursive:true,force:true});}
 }

@@ -36,6 +36,10 @@ def validate_data(data: Any) -> None:
     meta = data["metadata"]
     if not isinstance(data.get("runs"), list):
         raise ValueError("Input must contain a runs array.")
+    if meta.get("initial_view", "grid") not in ("grid", "reference"):
+        raise ValueError("metadata.initial_view must be grid or reference.")
+    if meta.get("initial_view") == "reference" and "reference_surface" not in data:
+        raise ValueError("The initial reference view requires a reference_surface.")
     if not isinstance(meta.get("samples"), int) or isinstance(meta["samples"], bool) or meta["samples"] < 1:
         raise ValueError("metadata.samples must be a positive integer.")
     for field, _ in AXES:
@@ -50,6 +54,14 @@ def validate_data(data: Any) -> None:
         raise ValueError("Eccentricity must lie in [0, 1).")
     if "earth_radius_km" in meta and (not finite_number(meta["earth_radius_km"]) or meta["earth_radius_km"] <= 0):
         raise ValueError("metadata.earth_radius_km must be positive and finite.")
+    if meta.get("altitude_interpolation", "linear_altitude") not in ("linear_altitude", "log_geocentric_perigee_radius"):
+        raise ValueError("Unsupported metadata.altitude_interpolation policy.")
+    if meta.get("altitude_interpolation") == "log_geocentric_perigee_radius":
+        if "earth_radius_km" not in meta:
+            raise ValueError("Log-radius interpolation requires explicit metadata.earth_radius_km.")
+        if any(not finite_number(value + meta["earth_radius_km"]) or value + meta["earth_radius_km"] <= 0
+               for value in meta["perigee_altitudes_km"]):
+            raise ValueError("Log-radius interpolation requires positive geocentric perigee radii that are finite.")
     seen, run_ids = set(), set()
     for row, run in enumerate(data["runs"]):
         if not isinstance(run, dict):
@@ -94,6 +106,27 @@ def validate_data(data: Any) -> None:
         perigee = run.get("min_initial_perigee_km")
         if perigee is not None and not finite_number(perigee):
             raise ValueError(f"Run {run_id}: min_initial_perigee_km must be finite or null.")
+    if "reference_surface" in data:
+        reference = data["reference_surface"]
+        if not isinstance(reference, dict) or not isinstance(reference.get("label"), str) or not reference["label"].strip():
+            raise ValueError("reference_surface must have a nonempty label.")
+        if "reference_surface" in reference:
+            raise ValueError("A reference surface cannot contain another reference surface.")
+        if not isinstance(reference.get("description", ""), str):
+            raise ValueError("reference_surface.description must be a string.")
+        validate_data(reference)
+        reference_meta = reference["metadata"]
+        for field, _ in AXES[:3]:
+            if len(reference_meta[field]) != 1:
+                raise ValueError("The reference surface must describe exactly one nominal orbit.")
+            value = reference_meta[field][0]
+            if not meta[field][0] <= value <= meta[field][-1]:
+                raise ValueError(f"Reference orbit {field} must lie within the explorer range.")
+        for field in ("samples", "position_sigmas_km", "velocity_sigmas_m_s"):
+            if reference_meta[field] != meta[field]:
+                raise ValueError(f"Reference surface {field} must match the main grid.")
+        if reference_meta.get("earth_radius_km", 6378.137) != meta.get("earth_radius_km", 6378.137):
+            raise ValueError("Reference surface earth_radius_km must match the main grid.")
 
 
 def find_plotly(explicit: Path | None) -> Path:
