@@ -309,6 +309,28 @@ saved manifest. `--help` describes grid and concurrency options.
 An operating-system lock prevents concurrent drivers from writing the same
 study directory and is released automatically when the driver exits.
 
+For a wider **1,000-30,000 km perigee-altitude** study, supply altitude nodes
+explicitly. The optional reuse input imports compatible measured cases by their
+parameters, avoiding duplicate particle calculations while retaining provenance:
+
+```powershell
+python tools/coverage_grid.py --exe build/distribution_coverage.exe `
+  --config examples/coverage_grid.cfg --output outputs/coverage-orbits-30000 `
+  --altitudes 1000,2000,3000,7000,12500,20000,30000 `
+  --altitude-interpolation log_geocentric_perigee_radius `
+  --reuse-study outputs/coverage-orbits --jobs 3 --threads 8
+```
+
+Reusing cases requires matching executable and configuration hashes. When
+extending separately into disjoint altitude grids, `tools/package_coverage_extension.py`
+can merge those grids after checking provenance and independent withheld
+interpolation results. It can also embed the original measured MEO surface as
+an **Original MEO / PDF** button: a = 26,560 km, perigee = 19,650.663 km,
+i = 55 degrees, e = 0.02. That button retains the original measurements and
+output epochs, providing a direct comparison with the PDF. Moving a slider
+returns to the expanded grid. The optional common height/color scale supports
+comparison across orbital settings; the fitted scale keeps each surface readable.
+
 The fast phase flow is exact for this program's fixed degree-2 J2 plus J2-squared
 mean equations after native initialization. It is restricted to those equations;
 it does not add atmospheric or other omitted forces. See

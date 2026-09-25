@@ -493,9 +493,24 @@ flushes one JSONL record per ensemble. The standard-library Python grid driver
 distributes native batches across processes, fingerprints the executable and
 configuration, resumes matching per-case checkpoints, and exports ordered
 JSON/CSV. The HTML renderer embeds validated data and a local Plotly bundle.
-The browser performs trilinear interpolation in log coverage time across orbital
-nodes while retaining the original uncertainty axes. Missing contributing nodes
+The browser interpolates log coverage time across orbital nodes while retaining
+the original uncertainty axes. Metadata can explicitly select logarithmic
+geocentric perigee radius as the altitude coordinate; inclination and eccentricity
+remain linear. Legacy reports without that policy retain linear-altitude weights.
+This coordinate follows the leading power-law dependence of phase shear on orbit
+size and is independently checked against withheld C++ simulations.
+Missing contributing nodes
 produce holes; intermediate slider positions never acquire a simulated status.
+An optional separate reference surface retains the original MEO/PDF measurements
+and cadence. Selecting it shows those exact values; changing a slider returns to
+the main grid. It never becomes an extra interpolation corner.
+
+`package_coverage_extension.py` checks complete source grids, executable/config
+fingerprints, shared covariance axes and scientific conventions before merging.
+It assigns unique display IDs while retaining source IDs and all measured fields.
+It requires a complete passing withheld interpolation audit before producing the
+HTML, CSV, provenance summary and checksums. The original MEO reference includes
+a census of every saved initial particle for truthful perigee-tail readouts.
 Full formulas and data conventions are in
 [docs/COVERAGE_EXPLORER.md](docs/COVERAGE_EXPLORER.md).
 
@@ -521,6 +536,10 @@ Tests use throwing checks that remain active in Release builds. The suites cover
 - `test_study.py`: actual study invocations, Cartesian products of run settings,
   byte-identical thread benchmarks, null/zero event conventions and failed-child
   checkpoint retention.
+- Coverage grid, validation, renderer and packaging tests cover safe measurement
+  reuse, explicit interpolation coordinates, power-law interpolation oracles,
+  complete-grid/provenance checks, and exact reference-surface values. Browser
+  tests exercise sliders, masks, CSV export, reference selection and plot scales.
 - `backend_probe.cpp` and the versioned Orekit fixture: 32 comparisons spanning
   J2 and J2-plus-J2-squared, mean/osculating input/output, and 0/1/30/365-day
   epochs. Optional upstream fixture groups provide additional native-formula
