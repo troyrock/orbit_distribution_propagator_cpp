@@ -194,11 +194,30 @@ orbit node contains an 11-by-11 logarithmic uncertainty grid spanning position
 65.34 million particle initializations before additional validation cases.
 
 Continuous slider values between measured orbit nodes interpolate **logarithms
-of coverage time**, with weights linear in altitude, inclination, and
-eccentricity. The result is positive and matches every valid measured node.
+of coverage time**. Legacy data without an `altitude_interpolation` metadata
+field, or with `linear_altitude`, use weights linear in altitude. The expanded
+30,000 km explorer declares
+`altitude_interpolation = "log_geocentric_perigee_radius"`: its altitude weights
+are linear in `log(earth_radius_km + perigee_altitude_km)`. Inclination and
+eccentricity weights remain linear. The configured Earth radius must be finite
+and positive. The result is positive and matches every valid measured node.
 The plot must distinguish those interpolated values from measured cases.
 Neither coverage-time brackets nor low-altitude counts should be presented as
 new measured diagnostics at interpolated slider positions.
+
+The expanded altitude nodes are `[1000, 2000, 3000, 7000, 12500, 20000, 30000]`
+km, retaining the original low-altitude measurements. A logarithmic radius
+coordinate follows the approximate energy-shear scaling more closely over this
+larger range: for near-circular orbits, position-dominated coverage time scales
+approximately as radius to the power 2.5, while velocity-dominated time scales
+approximately as radius. Both are linear in log radius and log time. This
+scaling motivates interpolation only; every measured node still comes from
+20,000 native DSST particle propagations. Direct holdouts at geometric-radius
+midpoints test interpolation, including the transition between these regimes.
+The five-percent gate is unchanged, and the report must state the measured
+holdout errors rather than infer accuracy from this scaling argument. Holdout
+files contain direct observations, so their interpolation policy need not match
+the main grid's policy.
 
 Interpolation must not bridge a missing or invalid support node. An unavailable
 interpolated value is distinct from a measured Earth-intersecting ensemble:

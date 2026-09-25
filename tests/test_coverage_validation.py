@@ -50,6 +50,23 @@ def mask(row):
     row.update({key: None for key in VALIDATOR.EVENT_FIELDS})
 
 
+def power_law_fixture(orbit_axes):
+    """Independent position-dominated scaling, with separable angular effects."""
+    document = fixture(orbit_axes)
+    radius = 6378.137
+    document["metadata"]["earth_radius_km"] = radius
+    for row in document["runs"]:
+        time = ((radius + row["perigee_altitude_km"]) / radius) ** 2.5 * math.exp(
+            0.004 * row["inclination_deg"] + 2 * row["eccentricity"]
+            - 0.05 * math.log(row["position_sigma_km"])
+            - 0.1 * math.log(row["velocity_sigma_m_s"]))
+        scale = time / row["coverage_time_days"]
+        for key in ("coverage_time_days", "coverage_lower_days", "coverage_upper_days",
+                    "coverage_confirmation_days", "cadence_days", "evaluated_horizon_days"):
+            row[key] *= scale
+    return document
+
+
 class CoverageValidationTests(unittest.TestCase):
     def setUp(self):
         self.study = fixture([[1000.0, 3000.0], [0.0, 90.0], [0.0, 0.1]])
@@ -65,6 +82,57 @@ class CoverageValidationTests(unittest.TestCase):
         for row in result["comparisons"]:
             self.assertEqual(len(row["support"]), 8)
             self.assertAlmostEqual(sum(node["weight"] for node in row["support"]), 1)
+
+    def test_explicit_linear_altitude_preserves_legacy_predictions(self):
+        legacy = VALIDATOR.validate_grid(self.study, self.holdouts)
+        self.study["metadata"]["altitude_interpolation"] = "linear_altitude"
+        explicit = VALIDATOR.validate_grid(self.study, self.holdouts)
+        self.assertEqual(legacy, explicit)
+
+    def test_power_law_is_exact_in_log_radius_at_geometric_midpoint(self):
+        radius = 6378.137
+        midpoint = math.sqrt((radius + 3000) * (radius + 30000)) - radius
+        study = power_law_fixture([[3000.0, 30000.0], [0.0, 90.0], [0.0, 0.1]])
+        holdouts = power_law_fixture([[midpoint], [45.0], [0.05]])
+        study["metadata"]["altitude_interpolation"] = "log_geocentric_perigee_radius"
+        # Direct measurements need no interpolation policy; legacy metadata is valid.
+        result = VALIDATOR.validate_grid(study, holdouts)
+        self.assertTrue(result["passed"])
+        self.assertEqual(result["altitude_interpolation"], "log_geocentric_perigee_radius")
+        self.assertLess(result["statistics"]["max_relative_error"], 3e-15)
+        for row in result["comparisons"]:
+            self.assertEqual(len(row["support"]), 8)
+            for node in row["support"]:
+                self.assertAlmostEqual(node["weight"], 0.125, places=14)
+        holdouts["metadata"]["altitude_interpolation"] = "linear_altitude"
+        self.assertEqual(result, VALIDATOR.validate_grid(study, holdouts))
+        del study["metadata"]["altitude_interpolation"]
+        self.assertGreater(VALIDATOR.validate_grid(study, holdouts)["statistics"][
+            "max_relative_error"], 0.05)
+
+    def test_log_radius_endpoints_reproduce_measured_values(self):
+        study = power_law_fixture([[1000.0, 30000.0], [0.0, 90.0], [0.0, 0.1]])
+        holdouts = power_law_fixture([[1000.0, 30000.0], [90.0], [0.1]])
+        study["metadata"]["altitude_interpolation"] = "log_geocentric_perigee_radius"
+        result = VALIDATOR.validate_grid(study, holdouts)
+        self.assertTrue(result["passed"])
+        self.assertLess(result["statistics"]["max_relative_error"], 2e-15)
+        self.assertTrue(all(len(row["support"]) == 1 for row in result["comparisons"]))
+
+    def test_bad_interpolation_policy_and_log_radius_are_rejected(self):
+        for policy in ("log_altitude", "unknown", None, 1, []):
+            with self.subTest(policy=policy):
+                bad = copy.deepcopy(self.study)
+                bad["metadata"]["altitude_interpolation"] = policy
+                with self.assertRaisesRegex(ValueError, "altitude_interpolation"):
+                    VALIDATOR.validate_grid(bad, self.holdouts)
+        for radius in (None, 0, -1, float("nan"), float("inf"), "6378.137", True):
+            with self.subTest(radius=radius):
+                bad = copy.deepcopy(self.study)
+                bad["metadata"].update(altitude_interpolation="log_geocentric_perigee_radius",
+                                       earth_radius_km=radius)
+                with self.assertRaisesRegex(ValueError, "earth radius"):
+                    VALIDATOR.validate_grid(bad, self.holdouts)
 
     def test_floating_axis_roundoff_and_node_endpoints(self):
         self.holdouts = fixture([[1000.0], [0.0], [0.0]])

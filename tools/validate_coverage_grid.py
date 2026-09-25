@@ -27,6 +27,19 @@ EVENT_FIELDS = ("coverage_time_days", "coverage_lower_days", "coverage_upper_day
 LIMIT = 0.05
 
 
+def altitude_interpolation_policy(metadata, label):
+    policy = metadata.get("altitude_interpolation", "linear_altitude")
+    if policy not in ("linear_altitude", "log_geocentric_perigee_radius"):
+        raise ValueError(f"{label}: unsupported altitude_interpolation {policy!r}")
+    if policy == "log_geocentric_perigee_radius":
+        radius = finite(metadata.get("earth_radius_km"), label + " earth radius")
+        if radius <= 0:
+            raise ValueError(f"{label}: earth radius must be positive for log-radius interpolation")
+        for altitude in metadata["perigee_altitudes_km"]:
+            finite(radius + altitude, label + " geocentric perigee radius")
+    return policy
+
+
 def finite(value, context):
     if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
         raise ValueError(f"{context}: expected a finite number")
@@ -121,6 +134,7 @@ def validate_document(document, label, allow_partial=False):
     if (axes[0][0] < 0 or axes[1][0] < 0 or axes[1][-1] > 90 or axes[2][0] < 0 or
             axes[2][-1] >= 1 or axes[3][0] <= 0 or axes[4][0] <= 0):
         raise ValueError(f"{label}: axes outside the supported orbit/uncertainty domain")
+    altitude_interpolation_policy(metadata, label)
     expected = math.prod(len(axis) for axis in axes)
     if metadata.get("expected_cases") != expected or metadata.get("completed_cases") != len(rows):
         raise ValueError(f"{label}: metadata case counts do not match axes and records")
@@ -163,7 +177,20 @@ def brackets(axis, value):
     raise ValueError("Withheld orbit lies outside the measured interpolation domain")
 
 
-def predict_withheld(row, axes, lookup):
+def altitude_brackets(axis, value, metadata):
+    """Bracket in physical altitude, then apply the declared coordinate weights."""
+    support = brackets(axis, value)
+    if (len(support) == 1 or
+            metadata.get("altitude_interpolation", "linear_altitude") == "linear_altitude"):
+        return support
+    lower, upper = support[0][0], support[1][0]
+    lower_radius = metadata["earth_radius_km"] + axis[lower]
+    weight = math.log1p((value - axis[lower]) / lower_radius) / math.log1p(
+        (axis[upper] - axis[lower]) / lower_radius)
+    return [(lower, 1 - weight), (upper, weight)]
+
+
+def predict_withheld(row, axes, lookup, metadata):
     result = {"run_id": row["run_id"], **{key: row[key] for key in FIELDS},
               "withheld_status": row["status"],
               "measured_time_days": row.get("coverage_time_days"),
@@ -178,7 +205,8 @@ def predict_withheld(row, axes, lookup):
         result["status"] = "missing_uncertainty_axis"
         return result
     try:
-        orbit = [brackets(axes[k], row[FIELDS[k]]) for k in range(3)]
+        orbit = [altitude_brackets(axes[0], row[FIELDS[0]], metadata),
+                 brackets(axes[1], row[FIELDS[1]]), brackets(axes[2], row[FIELDS[2]])]
     except ValueError:
         result["status"] = "outside_orbit_grid"
         return result
@@ -229,7 +257,11 @@ def validate_grid(study, holdouts, allow_partial=False):
                  "raan_deg", "argument_of_perigee_deg", "mean_anomaly_deg", "coverage_definition"):
         if study["metadata"].get(name) != holdouts["metadata"].get(name):
             raise ValueError(f"Measured and withheld metadata differ for {name}")
-    comparisons = [predict_withheld(row, axes, lookup) for row in holdouts["runs"]]
+    # Holdouts are direct measurements. Only the main grid chooses the interpolation
+    # coordinate, so a legacy holdout file does not need that optional policy field.
+    policy = altitude_interpolation_policy(study["metadata"], "measured")
+    comparisons = [predict_withheld(row, axes, lookup, study["metadata"])
+                   for row in holdouts["runs"]]
     errors = [row["absolute_relative_error"] for row in comparisons if row["status"] == "compared"]
     statistics = {"n": len(errors), "max_relative_error": max(errors) if errors else None,
                   "p95_relative_error": percentile(errors, 0.95) if errors else None,
@@ -242,6 +274,7 @@ def validate_grid(study, holdouts, allow_partial=False):
             "passed": gate == "passed", "provisional": partial,
             "status": "partial" if partial else "complete", "measured": measured,
             "holdouts": withheld, "interpolation_method": "Trilinear interpolation of log time",
+            "altitude_interpolation": policy,
             "relative_error_limit": LIMIT, "interpolation_gate": gate,
             "statistics": statistics,
             "comparison_status_counts": dict(sorted(Counter(row["status"] for row in comparisons).items())),

@@ -5,6 +5,7 @@ import concurrent.futures
 from contextlib import contextmanager
 import csv
 import hashlib
+import importlib.util
 import itertools
 import json
 import math
@@ -88,6 +89,87 @@ def load_completed(directory, cases):
     return completed
 
 
+def prepare_reuse(source, destination, manifest, cases):
+    """Validate a complete source study before adopting matching parameter tuples."""
+    source = source.resolve(strict=True)
+    if source == destination.resolve():
+        raise ValueError('Reuse source must differ from the output directory')
+    manifest_bytes = (source / 'manifest.json').read_bytes()
+    study_bytes = (source / 'study.json').read_bytes()
+    source_manifest = json.loads(manifest_bytes)
+    document = json.loads(study_bytes)
+    for key in ('schema_version', 'executable_sha256', 'config_sha256', 'config_text'):
+        if source_manifest.get(key) != manifest[key]:
+            raise ValueError(f'Reuse rejected: source {key} differs from the new study')
+    source_metadata = source_manifest.get('metadata', {})
+    # Grid axes and presentation interpolation may change; the physics contract may not.
+    presentation = set(AXES) | {'interpolation', 'altitude_interpolation'}
+    for key, value in manifest['metadata'].items():
+        if key not in presentation and source_metadata.get(key) != value:
+            raise ValueError(f'Reuse rejected: source metadata {key} differs')
+    for key, value in source_metadata.items():
+        if document.get('metadata', {}).get(key) != value:
+            raise ValueError(f'Reuse rejected: source study metadata {key} differs from its manifest')
+    # Loading by path keeps this standalone script importable from test tools too.
+    spec = importlib.util.spec_from_file_location(
+        'coverage_reuse_validation', Path(__file__).with_name('validate_coverage_grid.py'))
+    validator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(validator)
+    validator.validate_document(document, str(source))
+    by_parameters = {tuple(row[field] for field in FIELDS[1:]): row
+                     for row in document['runs']}
+    adopted = []
+    for case in cases:
+        row = by_parameters.get(tuple(case[field] for field in FIELDS[1:]))
+        if row is not None:
+            adopted.append(dict(row, run_id=case['run_id']))
+    provenance = {'source_directory': str(source),
+                  'manifest_sha256': hashlib.sha256(manifest_bytes).hexdigest(),
+                  'study_sha256': hashlib.sha256(study_bytes).hexdigest(),
+                  'adopted_cases': len(adopted)}
+    return provenance, adopted
+
+
+def initialize_manifest(directory, raw, manifest, cases, reuse_study):
+    """Install an atomic reused checkpoint, retaining ordinary offline resume."""
+    path = directory / 'manifest.json'
+    checkpoint = raw / 'batch_reused.jsonl'
+    adopted = None
+    if path.exists():
+        saved = json.loads(path.read_text(encoding='utf-8'))
+        if 'reuse_study' in saved:
+            manifest['reuse_study'] = saved['reuse_study']
+        if saved != manifest:
+            raise ValueError('Resume rejected: executable, configuration or axes differ from manifest')
+        provenance = saved.get('reuse_study')
+        if reuse_study is not None:
+            if provenance is None or reuse_study.resolve() != Path(provenance['source_directory']):
+                raise ValueError('Resume rejected: reuse source differs from manifest')
+        if provenance is not None and (reuse_study is not None or not checkpoint.exists()):
+            verified, adopted = prepare_reuse(Path(provenance['source_directory']),
+                                              directory, manifest, cases)
+            if verified != provenance:
+                raise ValueError('Resume rejected: reuse source content differs from manifest')
+    else:
+        if list(raw.iterdir()):
+            raise ValueError('Cannot adopt existing raw data without a matching manifest')
+        if reuse_study is not None:
+            manifest['reuse_study'], adopted = prepare_reuse(reuse_study, directory, manifest, cases)
+        atomic_json(path, manifest)
+    if adopted is not None:
+        if checkpoint.exists():
+            existing = [json.loads(line) for line in checkpoint.read_text(encoding='utf-8').splitlines()
+                        if line.strip()]
+            if existing != adopted:
+                raise ValueError('Resume rejected: adopted checkpoint differs from source study')
+        else:
+            temporary = checkpoint.with_suffix('.jsonl.tmp')
+            temporary.write_text(''.join(json.dumps(row, allow_nan=False) + '\n' for row in adopted),
+                                 encoding='utf-8')
+            temporary.replace(checkpoint)
+    return manifest
+
+
 def export(directory, manifest, completed, cases):
     ordered = [completed[c['run_id']] for c in cases if c['run_id'] in completed]
     metadata = dict(manifest['metadata'], completed_cases=len(ordered), expected_cases=len(cases),
@@ -105,6 +187,11 @@ def main():
     parser.add_argument('--exe', required=True, type=Path)
     parser.add_argument('--config', required=True, type=Path)
     parser.add_argument('--output', required=True, type=Path)
+    parser.add_argument('--reuse-study', type=Path,
+                        help='Reuse compatible records from a completed grid directory by parameter tuple')
+    parser.add_argument('--altitude-interpolation', default='linear',
+                        choices=('linear', 'log_geocentric_perigee_radius'),
+                        help='Altitude coordinate for visualization interpolation (default: legacy linear)')
     parser.add_argument('--jobs', type=int, default=3)
     parser.add_argument('--threads', type=int, default=8)
     parser.add_argument('--batch-size', type=int, default=16)
@@ -157,15 +244,11 @@ def run_study(args, axes):
             'domain_policy': 'Mask whole ensembles containing initial or mean Earth-crossing ellipses. No particles clipped, removed, or redrawn. Above-Earth low-perigee tails remain idealized gravity-only cases.',
         },
     }
-    manifest_path = args.output / 'manifest.json'
-    if manifest_path.exists():
-        if json.loads(manifest_path.read_text(encoding='utf-8')) != manifest:
-            raise ValueError('Resume rejected: executable, configuration or axes differ from manifest')
-    else:
-        if list(raw.iterdir()):
-            raise ValueError('Cannot adopt existing raw data without a matching manifest')
-        atomic_json(manifest_path, manifest)
+    # Omitting the default key preserves manifests and resume for legacy studies.
+    if args.altitude_interpolation != 'linear':
+        manifest['metadata']['altitude_interpolation'] = args.altitude_interpolation
     cases = make_cases(axes)
+    manifest = initialize_manifest(args.output, raw, manifest, cases, args.reuse_study)
     completed = load_completed(raw, cases)
     pending = [case for case in cases if case['run_id'] not in completed]
     # Complete uncertainty corners and center across all orbital settings first.
