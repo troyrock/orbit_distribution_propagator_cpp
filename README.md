@@ -336,3 +336,5 @@ mean equations after native initialization. It is restricted to those equations;
 it does not add atmospheric or other omitted forces. See
 [the coverage study guide](docs/COVERAGE_EXPLORER.md) for the coverage criterion,
 domain masks, reproducibility, interpolation checks, and algorithm proof.
+The completed expanded grid, its refinement, and validation results are recorded
+in [the 30,000 km study results](docs/COVERAGE_30000_RESULTS.md).

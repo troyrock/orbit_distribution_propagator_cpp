@@ -100,7 +100,7 @@
   return {values:{...values},mode:referenceActive?'reference':cs.length===1?'measured':'interpolated',corners:cs,cells,z,lower:cells.map(r=>r.map(c=>c.lower)),upper:cells.map(r=>r.map(c=>c.upper)),validCount:valid,totalCount:ps.length*vs.length,reasonCounts,min:valid?lo:null,max:valid?hi:null,below300,below500,minInitialPerigeeKm:finite(tailMinimum)?tailMinimum:null};
  }
  let compactCamera=window.innerWidth<=540;
- const defaultCamera=()=>({eye:compactCamera?{x:2.45,y:-2.6,z:1.83}:{x:1.52,y:-1.62,z:1.13},center:{x:0,y:0,z:-.07},up:{x:0,y:0,z:1}});
+ const defaultCamera=()=>({eye:compactCamera?{x:3.4,y:-3.6,z:2.5}:{x:1.52,y:-1.62,z:1.13},center:{x:0,y:0,z:-.07},up:{x:0,y:0,z:1}});
  const camera=defaultCamera();
  const axisStyle={color:'#a7b8ca',gridcolor:'#2c4057',zerolinecolor:'#395169',backgroundcolor:'#0e1b2c',showbackground:true,tickfont:{size:11},title:{font:{size:12,color:'#d8e6f3'}}};
  const layout={paper_bgcolor:'#111f31',plot_bgcolor:'#111f31',font:{family:'Segoe UI, sans-serif',color:'#eef4fa'},margin:{l:12,r:40,t:15,b:8},uirevision:'orbit-coverage',scene:{camera,aspectmode:'manual',aspectratio:{x:1.05,y:1.05,z:.87},xaxis:{...axisStyle,title:{text:'Position σ (km, log scale)',font:{size:12}},tickvals:[0,.5,1,1.5,2],ticktext:['1','3.16','10','31.6','100'],range:[Math.log10(ps[0]),Math.log10(ps.at(-1))]},yaxis:{...axisStyle,title:{text:'Velocity σ (m/s, log scale)',font:{size:12}},tickvals:[-2,-1.5,-1,-.5,0],ticktext:['0.01','0.0316','0.1','0.316','1'],range:[Math.log10(vs[0]),Math.log10(vs.at(-1))]},zaxis:{...axisStyle,title:{text:'Coverage time (days)',font:{size:12}},range:[0,globalMax*1.04]}},hoverlabel:{bgcolor:'#17283c',bordercolor:'#71dcda',font:{size:12,color:'#eef4fa'}}};
