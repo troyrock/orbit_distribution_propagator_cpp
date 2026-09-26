@@ -274,9 +274,13 @@ linear inclination and linear eccentricity. This respects the leading power-law
 dependence on orbit size. It does not replace the native propagation at measured
 nodes. A missing/masked supporting corner remains a gap.
 
-The {len(holdouts['runs'])} independently simulated holdouts use geometric midpoints
-in geocentric perigee radius, inclination 22.5/67.5 degrees, eccentricity .025/.075,
-and position sigma 1/10/100 km by velocity sigma .01/.1/1 m/s.
+The {len(holdouts['runs'])} independently simulated holdouts check original and
+refined altitude intervals, inclination 22.5/67.5 degrees, eccentricity .025/.075,
+and position sigma 1/10/100 km by velocity sigma .01/.1/1 m/s. Altitude checks
+use geometric midpoints in geocentric perigee radius. An original altitude
+midpoint can become a measured altitude after refinement; its independent
+inclination/eccentricity holdouts remain in the audit alongside new half-interval
+checks. Refinement does not discard earlier failing comparisons or widen the gate.
 The {stats['n']} supported comparisons have maximum relative error
 {100 * stats['max_relative_error']:.3f}%, 95th percentile
 {100 * stats['p95_relative_error']:.3f}%, and RMS

@@ -316,7 +316,7 @@ parameters, avoiding duplicate particle calculations while retaining provenance:
 ```powershell
 python tools/coverage_grid.py --exe build/distribution_coverage.exe `
   --config examples/coverage_grid.cfg --output outputs/coverage-orbits-30000 `
-  --altitudes 1000,2000,3000,7000,12500,20000,30000 `
+  --altitudes 1000,2000,3000,7000,12500,20000,24599.072067163703,30000 `
   --altitude-interpolation log_geocentric_perigee_radius `
   --reuse-study outputs/coverage-orbits --jobs 3 --threads 8
 ```
